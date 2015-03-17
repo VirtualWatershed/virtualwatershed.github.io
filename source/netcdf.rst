@@ -60,13 +60,130 @@ Example 1: Create a NetCDF of temperature on a grid
 ---------------------------------------------------
 
 In overly simple terms we use NetCDF to represent data as a function of some
-coordinates, like a grid of longitude and latitude values. Here's how we'd
-create a NetCDF of some temperatures on a 3x3 grid:
+coordinates, like a grid of longitude and latitude values. This example will
+show how we create a NetCDF of air temperatures on a 3x4 grid. 
+
+First, in order to follow the CF standard for our variable name, we need to
+check what we should use at the `web tool for CF standard names 
+<http://cfconventions.org/Data/cf-standard-names/27/build/cf-standard-name-table.html>`_.
+Luckily this one is easy, the standard name is `air_temperature`, and actually
+the standard name goes in the metadata about the variable, and we could use a
+short name like `temp` for the data representation. However, since
+`air_temperature` is not too long, we'll use that for the NetCDF variable name
+since it's easier to remember one name than two. Some of the code is taken directly from the 
+`writing_netCDF.ipynb <http://nbviewer.ipython.org/github/Unidata/netcdf4-python/blob/master/examples/writing_netCDF.ipynb>`_.
+example from the netCDF-python documentation.
+
+To represent the "x" and "y" latitude and longitude coordinates, we consult 
+Chapter 4 of the CF standard, `Coordinate types <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/ch04.html>`_.
+We will format and give attributes for our coordinate variables, latitude and
+longitude, according to the instructions there.
+
+The process of creating a new .nc dataset is:
+
+#. Create an empty Dataset object
+#. Create the 'dimensions', e.g. lat, lon, altitude, time
+#. Create the variables. Each of the dimensions has an associated variable
+   where the actual values of the dimension are stored. Here we also attach
+   weather data like temperature, snow water equivalent, solar radiation, etc.
+#. Add attributes, which are just additional metadata. There is global- and 
+   variable-scope metadata. See CF Conventions `Section 2.6: Attributes 
+   <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/ch02s06.html>`_
+   for the reference documentation.
+
+Let's see the exact mechanics of this:
 
 .. code-block:: python
     
-    # TODO solve this using mix of CF examples from App H and NetCDF tutorial
+    from __future__ import print_function
+    import netCDF4      # Note: python is case-sensitive!
+    import numpy as np  # numpy provides our data types; see var init below
 
+    # initialize new dataset
+    ncfile = netCDF4.Dataset('new.nc', mode='w', format='NETCDF4_CLASSIC') 
+
+    # initialize dimensions
+    lat_dim = ncfile.createDimension('lon', 3)     # longitude axis
+    lat_dim = ncfile.createDimension('lat', 4)     # latitude axis
+
+    # Define two variables with the same names as dimensions,
+    # a conventional way to define "coordinate variables".
+    lat = ncfile.createVariable('lat', np.float32, ('lat',))
+    lat.units = 'degrees_north'
+    lat.long_name = 'latitude'
+
+    lon = ncfile.createVariable('lon', np.float32, ('lon',))
+    lon.units = 'degrees_east'
+    lon.long_name = 'longitude'    
+
+    # Temperature is a function of latitude and longitude
+    temp = ncfile.createVariable('temp', np.float64, ('lat','lon')) 
+    temp.units = 'K'  # degrees Kelvin
+    temp.standard_name = 'air_temperature'  # this is a CF standard name
+
+    # Write latitudes, longitudes.
+    nlats = len(lat_dim)
+    nlons = len(lon_dim)
+    # Note: the ":" is necessary in these "write" statements
+    lat[:] = -90. + (180./nlats)*np.arange(nlats) # south pole to north pole
+    lon[:] = (180./nlats)*np.arange(nlons) # Greenwich meridian eastward 
+    
+    # populate temperature ndarray with reasonable earth temperatures
+    temp_arr = np.random.uniform(low=280, high=330, size=(nlats,nlons))
+    temp[:,:] = temp_arr
+
+    # add attributes, all global; see CF standards 
+    ncfile.title = 'My model data'
+    ncfile.institution = 'Idaho State University'
+    ncfile.source = 'Weather Stations in Reynolds Creek Watershed'
+    ncfile.history = 'Existed since 1990, first time in public domain'
+    
+    # to save the file to disk, close the `ncfile` object
+    ncfile.close()
+
+To confirm that this worked, check the output of ``ncdump`` at the command line.
+
+.. code-block:: bash
+    
+    ncdump new.nc
+
+You should see this, but with different random ``data``:
+
+
+.. code-block:: cdl
+
+    netcdf new {
+    dimensions:
+            lon = 3 ;
+            lat = 4 ;
+    variables:
+            float lat(lat) ;
+                    lat:units = "degrees_north" ;
+                    lat:long_name = "latitude" ;
+            float lon(lon) ;
+                    lon:units = "degrees_east" ;
+                    lon:long_name = "longitude" ;
+            double temp(lat, lon) ;
+                    temp:units = "K" ;
+                    temp:standard_name = "air_temperature" ;
+
+    // global attributes:
+                    :title = "My model data" ;
+                    :institution = "Idaho State University" ;
+                    :source = "Weather Stations in Reynolds Creek Watershed" ;
+                    :history = "Existed since 1990, first time in public domain" ;
+    data:
+
+     lat = -90, -45, 0, 45 ;
+
+     lon = 0, 45, 90 ;
+
+     temp =
+      303.51644518952, 329.87896020043, 320.682946298552,
+      282.647054412333, 294.753235738639, 297.738184716573,
+      290.698305690645, 321.484896481591, 303.564564474415,
+      304.710075475009, 321.517749128517, 324.796144202603 ;
+    }
 
 Example 2: Create a CF-formatted NetCDF of temperature at weather stations
 ------------------------------------------------------------------------
@@ -79,11 +196,7 @@ recorded data at the exact same time?
 
 We can consult the examples in the CF Conventions Manual in `Appendix H <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aph.html>`_ for guidance. We will essentially implement 
 a customized version of `H1 <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aph.html#idm482625503680>`_ 
-without the time dimension.
-
-Solution:
-
-
+without the time dimension. 
 
 .. code-block:: python
     
@@ -97,3 +210,17 @@ Example 3: CF-NetCDF of timeseries of temperatures at weather stations
 .. code-block:: python
     
     # TODO solve this using mix of CF examples from App H and NetCDF tutorial
+
+
+Common data form Description Language (CDL)
+-------------------------------------------
+
+The Common data format Description Language is a plain-text, fail-safe way to
+create NetCDF datasets. Once you write out the description of the data, you
+can run ``ncgen`` (`extended documentation <https://www.unidata.ucar.edu/software/netcdf/docs/netcdf/ncgen.html#ncgen>`_
+`manpage documentation <http://www.unidata.ucar.edu/software/netcdf/old_docs/docs_3_6_0/ncgen-man-1.html>`_) 
+to create a NetCDF file from a CDL file. This will check your syntax and
+initialize a file for you. Eventually we will integrate CDL with our tools, but
+we don't have anything yet.
+
+Here's how we could do the first example using just CDL files and ``ncgen``.
