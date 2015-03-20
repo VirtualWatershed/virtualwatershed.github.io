@@ -1,0 +1,34 @@
+netcdf weather_stations {
+
+dimensions:
+        time = UNLIMITED;
+        station = 3;
+        name_strlen = 2;
+
+variables:
+        char station_name(station, name_strlen) ;
+                station_name:long_name = "station name";
+                station_name:cf_role = "timeseries_id";
+        float lat(station) ;
+                lat:long_name = "station latitude" ;
+                lat:standard_name = "latitude" ;
+                lat:units = "degrees_north" ;
+        float lon(station) ;
+                lon:long_name = "station_longitude" ;
+                lon:standard_name = "longitude" ;
+                lon:units = "degrees_east" ;
+        float alt(station) ;
+                alt:long_name = "vertical distance above the surface";
+                alt:standard_name = "height";
+                alt:units = "m";
+                alt:positive = "up";
+                alt:axis = "Z";
+        double time(time) ;
+                time:standard_name = "time";
+                time:long_name = "time of measurement";
+                time:units = "hours since 2005-10-01 00:00:00";
+        float temp(time, station) ;
+                temp:standard_name = "air_temperature";
+                temp:units = "Kelvin";
+                temp:_FillValue = -999.9;
+}

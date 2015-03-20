@@ -175,7 +175,7 @@ as well as this `helpful stack overflow thread <http://stackoverflow.com/questio
     plt.savefig("example_plot.png", dpi=180, format='png')
 
 
-.. figure:: ../figures/no_temp_melt.png
+.. figure:: figures/no_temp_melt.png
     :scale: 50%
     :alt: Resampled predictions for snowmelt over three day periods for various heating temps
 

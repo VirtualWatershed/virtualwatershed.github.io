@@ -191,19 +191,101 @@ Example 2: Create a CF-formatted NetCDF of temperature at weather stations
 Consider the following situation: You have 
 weather stations named ``s1``, ``s2``, and ``s3`` recording the temperature at
 three-dimensional points in space (x,y,z), which correspond to a longitude, 
-latitude, and altitutde. How would we represent data where each station 
-recorded data at the exact same time?
+latitude, and altitutde. Each station records temperature every fifteen
+minutes. The data has been processed so that the all four measurements taken
+within an hour are averaged, so our temperature is really *mean temperature*,
+but in most spots, we'll just call it ``temp`` for short. Here is our tabular
+data:
+
+==============  =======  ===========
+station name    time     temp (K)
+==============  =======  ===========
+s1              0        301.4
+s2              0        298.0
+s3              0        310.2
+s1              1        300.4    
+s2              1        293.0    
+s3              1        306.2
+s1              2        302.4  
+s2              2        288.0 
+s3              2        308.1 
+==============  =======  ===========
+
+This time, our NetCDF dimensions are ``station name`` and ``time`` instead of
+``lat`` and ``lon``. Then in our CDL our dimension declaration is
+
+.. code-block:: cdl
+
+    dimensions:
+            time = UNLIMITED;
+            station = 3;
+            name_strlen = 2; // `s1` has two characters
+
+By declaring ``time`` as ``UNLIMITED``, we allow for future measurements to be
+appended to the Dataset.
+
+We also have this tabular data about the stations:
+
+==============  =======  ========  ======
+station name    lat      lon       alt
+==============  =======  ========  ======
+s1              49.2     -115.4    1004
+s2              49.4     -114.0    1025
+s3              50.1     -116.2    923
+==============  =======  ========  ======
+
+So although lat, lon, and alt won't be "dimensions", they will be included as
+"variables". We will consider them functions of "station name", each represented 
+in the CDL as
+
+.. code-block:: cdl
+
+     
+    variables:
+            char station_name(station):
+                    station_name:long_name = "station name";
+                    station_name:cf_role = "timeseries_id";
+            float lat(station) ;
+                    lat:long_name = "station latitude" ;
+                    lat:standard_name = "latitude" ;
+                    lat:units = "degrees_north" ;
+            float lon(station) ;
+                    lon:long_name = "station_longitude" ;
+                    lon:standard_name = "longitude" ;
+                    lon:units = "degrees_east" ;
+            float alt(station) ;
+                    alt:long_name = "vertical distance above the surface";
+                    alt:standard_name = "height";
+                    alt:units = "m";
+                    alt:positive = "up";
+                    alt:axis = "Z";
+
+our temperature variable is a function of station and time:
+
+.. code-block:: cdl
+
+    variables:
+            ...
+            double time(time);
+                    time:standard_name = "time";
+                    time:long_name = "time of measurement"
+                    time:units = "hours since 2005-10-01 00:00:00"
+            float temp(time, station)
+                    temp:standard_name = "air_temperature";
+                    temp:units = "Kelvin";
+                    temp:_FillValue = -999.9;
+
 
 We can consult the examples in the CF Conventions Manual in `Appendix H <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aph.html>`_ for guidance. We will essentially implement 
-a customized version of `H1 <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aph.html#idm482625503680>`_ 
-without the time dimension. 
+`H2.1 <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aphs02.html>`_. 
+
 
 .. code-block:: python
     
     # TODO solve this using mix of CF examples from App H and NetCDF tutorial
 
 
-Example 3: CF-NetCDF of timeseries of temperatures at weather stations
+Example 2: CF-NetCDF of timeseries of temperatures at weather stations
 ----------------------------------------------------------------------
 
 
@@ -220,7 +302,21 @@ create NetCDF datasets. Once you write out the description of the data, you
 can run ``ncgen`` (`extended documentation <https://www.unidata.ucar.edu/software/netcdf/docs/netcdf/ncgen.html#ncgen>`_
 `manpage documentation <http://www.unidata.ucar.edu/software/netcdf/old_docs/docs_3_6_0/ncgen-man-1.html>`_) 
 to create a NetCDF file from a CDL file. This will check your syntax and
-initialize a file for you. Eventually we will integrate CDL with our tools, but
-we don't have anything yet.
+initialize a file for you. Here are a few resources for CDL:
 
-Here's how we could do the first example using just CDL files and ``ncgen``.
+* `NetCDF Workshop 2010 page on CDL <https://www.unidata.ucar.edu/software/netcdf/workshops/2010/utilities/CDL.html>`_
+* `CDL Syntax <https://www.unidata.ucar.edu/software/netcdf/docs/netcdf/CDL-Syntax.html>`_
+
+Here's how we could do the first example using just CDL files and ``ncgen``. 
+There is a CDL file in the `example <>`_ directory called
+``weather_stations.cdl`` that defines weather station data from Example 2. 
+To build an empty NetCDF file we could insert data into, call 
+
+.. code-block:: bash
+
+    ncgen -o weather_stations.nc weather_stations.cdl
+
+and we'd have a new NetCDF file ``weather_stations.nc`` with an all-empty data
+section.
+
+
