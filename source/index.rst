@@ -12,8 +12,8 @@ Contents:
    :maxdepth: 2
 
    tutorial
-   watershed
    netcdf 
+   watershed
    isnobal
    isnobal_experiment
    

@@ -67,10 +67,8 @@ First, in order to follow the CF standard for our variable name, we need to
 check what we should use at the `web tool for CF standard names 
 <http://cfconventions.org/Data/cf-standard-names/27/build/cf-standard-name-table.html>`_.
 Luckily this one is easy, the standard name is `air_temperature`, and actually
-the standard name goes in the metadata about the variable, and we could use a
-short name like `temp` for the data representation. However, since
-`air_temperature` is not too long, we'll use that for the NetCDF variable name
-since it's easier to remember one name than two. Some of the code is taken directly from the 
+the standard name goes in the metadata about the variable. We just call the
+python variable ``temp``. Some of the code is taken directly from the 
 `writing_netCDF.ipynb <http://nbviewer.ipython.org/github/Unidata/netcdf4-python/blob/master/examples/writing_netCDF.ipynb>`_.
 example from the netCDF-python documentation.
 
@@ -91,7 +89,7 @@ The process of creating a new .nc dataset is:
    <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/ch02s06.html>`_
    for the reference documentation.
 
-Let's see the exact mechanics of this:
+Here's the code for creating this grid of temperature data:
 
 .. code-block:: python
     
@@ -198,7 +196,7 @@ but in most spots, we'll just call it ``temp`` for short. Here is our tabular
 data:
 
 ==============  =======  ===========
-station name    time     temp (K)
+station name    time     temp
 ==============  =======  ===========
 s1              0        301.4
 s2              0        298.0
@@ -276,6 +274,9 @@ our temperature variable is a function of station and time:
                     temp:_FillValue = -999.9;
 
 
+Build the dataset in python
+```````````````````````````
+
 We can consult the examples in the CF Conventions Manual in `Appendix H <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aph.html>`_ for guidance. We will essentially implement 
 `H2.1 <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aphs02.html>`_
 but following the instructions from `the Write NetCDF ipynb <http://nbviewer.ipython.org/github/Unidata/unidata-python-workshop/blob/master/writing_netCDF.ipynb>`_ 
@@ -284,21 +285,17 @@ the python procedure are in slightly different order.
 
 .. code-block:: python
 
-    from netCDF4 import Dataset 
+    from netCDF4 import Dataset
     import numpy as np
-    from pandas import read_csv
+    import pandas as pd
 
-    ncfile = Dataset('pygen_station_data.nc', modw='w', format='NETCDF4_CLASSIC')
-    
+    ncfile = Dataset('pygen_station_data.nc', mode='w', format='NETCDF4')
+
     # `None` stands for UNLIMITED here
     time_dim = ncfile.createDimension('time', None)
     station_dim = ncfile.createDimension('station', 3)
-    name_strlen = ncfile.createDimension('name_strlen', 2)
-    
-    # dimensions: name_strlen, station, time
-    name_strlen = ncfile.createVariable('name_strlen', str, ('name_strlen',))
 
-    station = ncfile.createVariable('station', str, ('station','name_strlen'))
+    station = ncfile.createVariable('station', str, ('station',))
     station.long_name = "station name"
     station.cf_role = "timeseries_id"
 
@@ -325,7 +322,7 @@ the python procedure are in slightly different order.
     alt.axis = 'Z'
 
     # temperature
-    temp = ncfile.createVariable('temp', np.float32, ('time','station'),
+    temp = ncfile.createVariable('temp', np.float32, ('time', 'station'),
                                  fill_value=-999.99)
     temp.units = 'K'
     temp.standard_name = 'air_temperature'
@@ -333,7 +330,7 @@ the python procedure are in slightly different order.
 
 We have our tabular data that has the station information in 
 `examples/station_info.csv <https://github.com/tri-state-epscor/vw-doc/blob/master/examples/station_info.csv>`_ and the "weather" info (really just temperature)
-in `examples/station_weather.csv <https://github.com/tri-state-epscor/vw-doc/blob/master/examples/station_weather.csv>`_. We'll use the `read_csv <http://pandas.pydata.org/pandas-docs/dev/io.html#io-read-csv-table>`_ 
+in `examples/station_weather.csv <https://github.com/tri-state-epscor/vw-doc/blob/master/examples/station_weather.csv>`_. We'll use `read_csv <http://pandas.pydata.org/pandas-docs/dev/io.html#io-read-csv-table>`_ 
 from the `pandas <http://pandas.pydata.org/>`_ data analysis library. We'll 
 read those files in and use the data stored in them to finish creating our 
 NetCDF version of the weather station data.
@@ -371,12 +368,19 @@ directory
     
     cd examples/ && python make_station_data.py
 
-which will create a new file, ``pygen_station_data.nc``. If you haven't already,
+which will create a new file, ``pygen_station_data.nc``. 
+
+
+Confirm success
+```````````````
+
+If you haven't already,
 get the NetCDF Operators package, `NCO <http://nco.sourceforge.net/>`_. It has
 some nice tools, one of which will help us confirm that we have loaded the 
 NetCDF ``temp`` variable correctly. Using the `ncks
 <http://nco.sourceforge.net/nco.html#ncks-netCDF-Kitchen-Sink>`_ utility (NetCDF
-Kitchen Sink, you'll see why) we print a lot of info about the file
+Kitchen Sink, you'll see why) we print a lot of info about the file. The
+important part comes near the bottom
 
 .. code-block:: bash
 
@@ -384,6 +388,7 @@ Kitchen Sink, you'll see why) we print a lot of info about the file
 
 .. code-block:: cdl
 
+    ...
     time[0]=0 station[0]=s1 temp[0]=301.4 K
     time[0]=0 station[1]=s2 temp[1]=298 K
     time[0]=0 station[2]=s3 temp[2]=310.2 K
@@ -393,11 +398,9 @@ Kitchen Sink, you'll see why) we print a lot of info about the file
     time[2]=2 station[0]=s1 temp[6]=302.4 K
     time[2]=2 station[1]=s2 temp[7]=288 K
     time[2]=2 station[2]=s3 temp[8]=308.1 K
+    ...
 
-
-So just as it was in ``weather_stations.csv`` it is in our newly generated .nc
-file.
-
+We know we're good because this matches ``weather_stations.csv``.
 
     
 Common data form Description Language (CDL)

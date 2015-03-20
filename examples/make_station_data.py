@@ -13,10 +13,6 @@ ncfile = Dataset('pygen_station_data.nc', mode='w', format='NETCDF4')
 # `None` stands for UNLIMITED here
 time_dim = ncfile.createDimension('time', None)
 station_dim = ncfile.createDimension('station', 3)
-# name_strlen = ncfile.createDimension('name_strlen', 2)
-
-# dimensions: name_strlen, station, time
-# name_strlen = ncfile.createVariable('name_strlen', str, ('name_strlen',))
 
 station = ncfile.createVariable('station', str, ('station',))
 station.long_name = "station name"
@@ -49,6 +45,8 @@ temp = ncfile.createVariable('temp', np.float32, ('time', 'station'),
                              fill_value=-999.99)
 temp.units = 'K'
 temp.standard_name = 'air_temperature'
+
+# Load tabular data and populate netcdf
 station_info = pd.read_csv('station_info.csv')
 station_weather = pd.read_csv('station_weather.csv')
 
