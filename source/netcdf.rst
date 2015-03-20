@@ -364,7 +364,7 @@ NetCDF version of the weather station data.
 
 
 The two blocks of python code in this example can be found in
-`example/make_station_data.py <>`_. Run that example from the ``examples``
+`example/make_station_data.py <https://github.com/tri-state-epscor/vw-doc/blob/master/examples/make_station_data.py>`_. Run that example from the ``examples``
 directory
 
 .. code-block:: bash
