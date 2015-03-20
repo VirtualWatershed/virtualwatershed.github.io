@@ -339,6 +339,14 @@ read those files in and use the data stored in them to finish creating our
 NetCDF version of the weather station data.
 
 
+.. code-block:: python
+
+    import pandas as pd
+    station_info = pd.read_csv('examples/station_info.csv')
+    station_weather = pd.read_csv('examples/station_weather.csv')
+    
+
+
 Common data form Description Language (CDL)
 -------------------------------------------
 
