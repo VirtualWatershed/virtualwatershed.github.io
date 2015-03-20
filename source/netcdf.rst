@@ -332,8 +332,8 @@ the python procedure are in slightly different order.
 
 
 We have our tabular data that has the station information in 
-`examples/station_info.csv <>`_ and the "weather" info (really just temperature)
-in `examples/station_weather.csv <>`_. We'll use the `read_csv <http://pandas.pydata.org/pandas-docs/dev/io.html#io-read-csv-table>`_ 
+`examples/station_info.csv <https://github.com/tri-state-epscor/vw-doc/blob/master/examples/station_info.csv>`_ and the "weather" info (really just temperature)
+in `examples/station_weather.csv <https://github.com/tri-state-epscor/vw-doc/blob/master/examples/station_weather.csv>`_. We'll use the `read_csv <http://pandas.pydata.org/pandas-docs/dev/io.html#io-read-csv-table>`_ 
 from the `pandas <http://pandas.pydata.org/>`_ data analysis library. We'll 
 read those files in and use the data stored in them to finish creating our 
 NetCDF version of the weather station data.
@@ -342,11 +342,64 @@ NetCDF version of the weather station data.
 .. code-block:: python
 
     import pandas as pd
+    import numpy as np
+
     station_info = pd.read_csv('examples/station_info.csv')
     station_weather = pd.read_csv('examples/station_weather.csv')
+
+    station[:] = station_info.station_name
+    time[:] = station_info.time
+
+    lon[:] = station_info.lon
+    lat[:] = station_info.lat
+    alt[:] = station_info.alt
     
+    station_weather.sort(['time', 'station_name'], inplace=True)  
+
+    temp_array = np.reshape(station_weather.time, (len(time),len(station)))
+
+    temp[:,:] = temp_array
+
+    ncfile.close()
 
 
+The two blocks of python code in this example can be found in
+`example/make_station_data.py <>`_. Run that example from the ``examples``
+directory
+
+.. code-block:: bash
+    
+    cd examples/ && python make_station_data.py
+
+which will create a new file, ``pygen_station_data.nc``. If you haven't already,
+get the NetCDF Operators package, `NCO <http://nco.sourceforge.net/>`_. It has
+some nice tools, one of which will help us confirm that we have loaded the 
+NetCDF ``temp`` variable correctly. Using the `ncks
+<http://nco.sourceforge.net/nco.html#ncks-netCDF-Kitchen-Sink>`_ utility (NetCDF
+Kitchen Sink, you'll see why) we print a lot of info about the file
+
+.. code-block:: bash
+
+    ncks pygen_station_data.py
+
+.. code-block:: cdl
+
+    time[0]=0 station[0]=s1 temp[0]=301.4 K
+    time[0]=0 station[1]=s2 temp[1]=298 K
+    time[0]=0 station[2]=s3 temp[2]=310.2 K
+    time[1]=1 station[0]=s1 temp[3]=300.4 K
+    time[1]=1 station[1]=s2 temp[4]=293 K
+    time[1]=1 station[2]=s3 temp[5]=306.2 K
+    time[2]=2 station[0]=s1 temp[6]=302.4 K
+    time[2]=2 station[1]=s2 temp[7]=288 K
+    time[2]=2 station[2]=s3 temp[8]=308.1 K
+
+
+So just as it was in ``weather_stations.csv`` it is in our newly generated .nc
+file.
+
+
+    
 Common data form Description Language (CDL)
 -------------------------------------------
 
