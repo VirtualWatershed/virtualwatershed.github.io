@@ -272,26 +272,71 @@ our temperature variable is a function of station and time:
                     time:units = "hours since 2005-10-01 00:00:00"
             float temp(time, station)
                     temp:standard_name = "air_temperature";
-                    temp:units = "Kelvin";
+                    temp:units = "K";
                     temp:_FillValue = -999.9;
 
 
 We can consult the examples in the CF Conventions Manual in `Appendix H <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aph.html>`_ for guidance. We will essentially implement 
-`H2.1 <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aphs02.html>`_. 
-
-
-.. code-block:: python
-    
-    # TODO solve this using mix of CF examples from App H and NetCDF tutorial
-
-
-Example 2: CF-NetCDF of timeseries of temperatures at weather stations
-----------------------------------------------------------------------
-
+`H2.1 <http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aphs02.html>`_
+but following the instructions from `the Write NetCDF ipynb <http://nbviewer.ipython.org/github/Unidata/unidata-python-workshop/blob/master/writing_netCDF.ipynb>`_ 
+used before. Since we're using the classic data model, our assignments are in
+the python procedure are in slightly different order.
 
 .. code-block:: python
+
+    from netCDF4 import Dataset 
+    import numpy as np
+    from pandas import read_csv
+
+    ncfile = Dataset('pygen_station_data.nc', modw='w', format='NETCDF4_CLASSIC')
     
-    # TODO solve this using mix of CF examples from App H and NetCDF tutorial
+    # `None` stands for UNLIMITED here
+    time_dim = ncfile.createDimension('time', None)
+    station_dim = ncfile.createDimension('station', 3)
+    name_strlen = ncfile.createDimension('name_strlen', 2)
+    
+    # dimensions: name_strlen, station, time
+    name_strlen = ncfile.createVariable('name_strlen', str, ('name_strlen',))
+
+    station = ncfile.createVariable('station', str, ('station','name_strlen'))
+    station.long_name = "station name"
+    station.cf_role = "timeseries_id"
+
+    time = ncfile.createVariable('time', np.float64, ('time',))
+    time.units = 'hours since 2015-10-01 00:00:00'
+    time.long_name = 'time'
+
+    # lon, lat, altitude
+    lon = ncfile.createVariable('lon', np.float32, ('station',))
+    lon.standard_name = 'longitude'
+    lon.long_name = 'station longitude'
+    lon.units = 'degrees_east'
+
+    lat = ncfile.createVariable('lat', np.float32, ('station',))
+    lat.standard_name = 'latitude'
+    lat.long_name = 'latitude'
+    lat.units = 'degrees_north'
+
+    alt = ncfile.createVariable('alt', np.float32, ('station',))
+    alt.standard_name = 'height'
+    alt.long_name = 'vertical distance above the surface'
+    alt.units = 'm'
+    alt.positive = 'up'
+    alt.axis = 'Z'
+
+    # temperature
+    temp = ncfile.createVariable('temp', np.float32, ('time','station'),
+                                 fill_value=-999.99)
+    temp.units = 'K'
+    temp.standard_name = 'air_temperature'
+
+
+We have our tabular data that has the station information in 
+`examples/station_info.csv <>`_ and the "weather" info (really just temperature)
+in `examples/station_weather.csv <>`_. We'll use the `read_csv <http://pandas.pydata.org/pandas-docs/dev/io.html#io-read-csv-table>`_ 
+from the `pandas <http://pandas.pydata.org/>`_ data analysis library. We'll 
+read those files in and use the data stored in them to finish creating our 
+NetCDF version of the weather station data.
 
 
 Common data form Description Language (CDL)
@@ -308,15 +353,13 @@ initialize a file for you. Here are a few resources for CDL:
 * `CDL Syntax <https://www.unidata.ucar.edu/software/netcdf/docs/netcdf/CDL-Syntax.html>`_
 
 Here's how we could do the first example using just CDL files and ``ncgen``. 
-There is a CDL file in the `example <>`_ directory called
-``weather_stations.cdl`` that defines weather station data from Example 2. 
-To build an empty NetCDF file we could insert data into, call 
+There is a CDL file in the `example <https://github.com/tri-state-epscor/vw-doc/tree/master/examples>`_
+directory called ``weather_stations.cdl`` that defines weather station data 
+from Example 2.  To build an empty NetCDF file we could insert data into, call 
 
 .. code-block:: bash
 
     ncgen -o weather_stations.nc weather_stations.cdl
 
 and we'd have a new NetCDF file ``weather_stations.nc`` with an all-empty data
-section.
-
-
+section and identical dimension and variable sections.
