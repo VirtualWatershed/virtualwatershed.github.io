@@ -13,6 +13,7 @@ Contents:
 
    tutorial
    netcdf 
+   isnobal_netcdf
    watershed
    isnobal
    isnobal_experiment
