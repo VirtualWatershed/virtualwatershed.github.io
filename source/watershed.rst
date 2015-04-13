@@ -51,7 +51,7 @@ following.
    u'modelname': u'isnobal',
       u'state': u'Idaho'}],
        u'description': u'Test ISNOBAL Arizona input binary file Hour 0000',
-        u'downloads': [{u'bin': u'http://129.24.196.43//apps/my_app/datasets/7ac44fa7-6515-422e-a3a9-e9aadf4924bb/in.0000.original.bin'}], ...
+        u'downloads': [{u'bin': u'http://vwp-dev.unm.edu/apps/my_app/datasets/7ac44fa7-6515-422e-a3a9-e9aadf4924bb/in.0000.original.bin'}], ...
 
 The default number of results fetched (enforced by the watershed) is 15, so to 
 get 30, use the ``limit`` keyword, for example
@@ -63,7 +63,7 @@ same number of records and get the same output.
 
 When using the ``VWClient.search`` function, you can specify any of the 
 key/value pairs specified in the `virtual watershed documentation 
-<http://129.24.196.43//docs/stable/search.html#search-objects>`_.
+<http://vwp-dev.unm.edu/docs/stable/search.html#search-objects>`_.
 
 The search function returns a ``QueryResult`` instance.
 
