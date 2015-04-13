@@ -19,7 +19,12 @@ import os
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #sys.path.insert(0, os.path.abspath('.'))
+
+# Not sure why this is necessary, but going with it.
+sys.path.insert(0, os.path.abspath('../../wcwave_adaptors'))
+# if I don't do both, Sphinx can't find either isnobal or wateshed adaptors
 sys.path.insert(0, os.path.abspath('../../wcwave_adaptors/wcwave_adaptors'))
+print sys.path
 
 # -- General configuration ------------------------------------------------
 

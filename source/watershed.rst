@@ -10,7 +10,6 @@ model or modeling framework, such as ISNOBAL or CSDMS.
 VWClient: User Interface to the Virtual Watershed
 `````````````````````````````````````````````````
 
-
 The ``VWClient`` performs several routine virtual watershed functions. The
 first, performed in the constructor, is to verify that the user/password
 is an authorized account. There is a ``search`` method with options 
