@@ -19,16 +19,15 @@ There are obvious ``download`` and ``upload`` functions. Finally there is
 an ``insert_metadata`` function that pushes JSON watershed metadata to the
 database.
 
-.. autoclass:: watershed.VWClient
+.. autoclass:: wcwave_adaptors.wcwave_adaptors.watershed.VWClient
     :members:
 
 Typically there will be no need to directly use the constructor to create a new
 ``VWClient`` instance. Instead use this convenience function that will read
 ``default.conf`` and establish a connection with 
 
-.. autofunction:: watershed.default_vw_client
+.. autofunction:: wcwave_adaptors.wcwave_adaptors.watershed.default_vw_client
 
-.. autofunction:: watershed.get_config
 
 VW Client Examples
 ------------------
@@ -66,7 +65,7 @@ key/value pairs specified in the `virtual watershed documentation
 
 The search function returns a ``QueryResult`` instance.
 
-.. autoclass:: watershed.QueryResult
+.. autoclass:: wcwave_adaptors.wcwave_adaptors.watershed.QueryResult
     :members:
 
 
@@ -78,9 +77,9 @@ Virtual Watershed metadata and one for generating XML-formatted FGDC "science"
 metadata. The templates used to implement these functions are stored in the
 ``resources/`` directory.
 
-.. autofunction:: watershed.make_watershed_metadata
+.. autofunction:: wcwave_adaptors.wcwave_adaptors.watershed.make_watershed_metadata
 
-.. autofunction:: watershed.make_fgdc_metadata
+.. autofunction:: wcwave_adaptors.wcwave_adaptors.watershed.make_fgdc_metadata
 
 Configuration File Getter
 `````````````````````````
@@ -91,8 +90,6 @@ functions because it would be wasteful to continually reload the config file.
 Instead, we force the user to pass in the configuration file. It may be 
 called with no arguments if called from the root folder. Otherwise the 
 configuration file must be specified. See below for an example.
-
-.. autofunction:: watershed.get_config
 
 Example using metadata builders and the VW Client
 `````````````````````````````````````````````````
@@ -142,10 +139,10 @@ whole directory to the virtual watershed
 Upsert
 -------
 
-.. autofunction:: watershed.upsert
+.. autofunction:: wcwave_adaptors.wcwave_adaptors.watershed.upsert
 
 
 Make Watershed Metadata
 ```````````````````````
 
-.. autofunction:: watershed.metadata_from_file
+.. autofunction:: wcwave_adaptors.wcwave_adaptors.watershed.metadata_from_file

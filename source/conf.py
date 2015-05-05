@@ -21,9 +21,9 @@ import os
 #sys.path.insert(0, os.path.abspath('.'))
 
 # Not sure why this is necessary, but going with it.
-sys.path.insert(0, os.path.abspath('../../wcwave_adaptors'))
+sys.path.insert(0, os.path.abspath('../../'))
 # if I don't do both, Sphinx can't find either isnobal or wateshed adaptors
-sys.path.insert(0, os.path.abspath('../../wcwave_adaptors/wcwave_adaptors'))
+# sys.path.insert(0, os.path.abspath('../../wcwave_adaptors/wcwave_adaptors'))
 print sys.path
 
 # -- General configuration ------------------------------------------------
