@@ -3,6 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+.. image:: figures/WC-WAVE_banner.png
+
 Python API for the Virtual Watershed
 ====================================
 
@@ -12,22 +14,24 @@ Developer Tools for Building Scientific Applications
 
 The virtual watershed platform has been built of various `"cyberinfrastructure"
 <http://www.nsf.gov/div/index.jsp?div=ACI>`_
-resources including a robust data management platform, the VW Data Engine (VWDE),
-a web service that converts properly formatted CSV data to NetCDF data, web
-services that run hydrological models, and cutting-edge 3D immersive
+resources. At the backbone of these resources is a robust data management platform, 
+which we'll call the VW Data Engine (VWDE).
+Using the VWDE as a powerful provider of data (web) services, we are also
+building add-on web services that run hydrological models, and cutting-edge 3D immersive
 visualization environments. The "adaptors" are the glue that holds this together
 in a single framework. This Python API mainly provides adaptors for interacting
 with various facets of the virtual watershed.
 
 There are adaptors for getting data into the data engine, adaptors that check
 which models the NetCDF files output from grid making are compatible with,
-convert model output back to our common format, NetCDF, and create metadata so
+adaptors that convert model output back to our common format, NetCDF, and create metadata so
 that all this data can be (re)discovered later using the data engine's API. 
 We deliver this complete package through a web app, which can be thought of as
 the human adaptor, though that is contained in the 
 `vwplatform <https://github.com/mtpain/vwplatform>`_.
 
-To get started, continue reading this quickstart guide. It will guide you
+To get started interacting with the VWDE through the Python adaptor API, 
+continue reading this quickstart guide. It will guide you
 through a series of commands that you can use right now in a Python shell.
 IPython is a really handy shell and is recommended in general and for this
 tutorial guide.
@@ -48,13 +52,9 @@ Connect to and query the virtual watershed data engine
 
 First, the pre-requisites are
 
-1. You've followed the installation instructions at the 
-    `wcwave_adaptors GitHub page <https://github.com/tri-state-epscor/wcwave_adaptors>`_.
-2. You've added the  ``wcwave_adaptors`` to your path, either through 
-    ``sys.path.append('~/path/to/adaptors')`` or through the ``$PYTHONPATH``
-    environment variable.
-3. You have an account with the Virtual Watershed data engine, which you must
-   ask for. Please email `Matt Turner <maturner@uidaho.edu>`_ for an account.
+1. You've followed the installation instructions at the `wcwave_adaptors GitHub page <https://github.com/tri-state-epscor/wcwave_adaptors>`_.
+2. You've added the  ``wcwave_adaptors`` to your path, either through ``sys.path.append('~/path/to/adaptors')`` or through the ``$PYTHONPATH`` environment variable.
+3. You have an account with the Virtual Watershed data engine, which you must ask for. Please email `Matt Turner <maturner@uidaho.edu>`_ for an account.
 
 Now in an IPython (or other) shell, follow along with these examples.
 
@@ -66,6 +66,15 @@ To connect to the virtual watershed
     vw_client = VWClient('https://vwp-dev.unm.edu', 'your-username', 'your-password')
 
 If you have been authenticated correctly, this will finish silently. 
+
+You may also use this
+
+.. code-block:: python
+
+    vw_client = default_vw_client()
+
+But in order for this to work, you must have personalized your ``default.conf`` 
+as described in the `wcwave_adaptors README <https://github.com/tri-state-epscor/wcwave_adaptors#configuration-files>`_.
 
 .. warning::
 
@@ -102,7 +111,9 @@ In order to query all datasets and how many are in the virtual watershed,
 
 
 If you ``print r0``, you will see the actual metadata record which someone has
-generated and inserted for the data.
+generated and inserted for the data. There you can also see the ``downloads``
+section of the metadata, which is a list of dictionaries. This contains the 
+download link for the data file that the metadata represents. Access it like so:
 
 ::
 
