@@ -1,0 +1,868 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>wcwave_adaptors.wcwave_adaptors.watershed &mdash; VW Python API</title>
+    
+    <link rel="stylesheet" href="../../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '1.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="VW Python API" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">VW Python API</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for wcwave_adaptors.wcwave_adaptors.watershed</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Virtual Watershed Adaptor. Handles fetching and searching of data, model</span>
+<span class="sd">run initialization, and pushing of data. Does this for associated metadata</span>
+<span class="sd">as well. Each file that&#39;s either taken as input or produced as output gets</span>
+<span class="sd">associated metadata.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">configparser</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">requests</span>
+<span class="n">requests</span><span class="o">.</span><span class="n">packages</span><span class="o">.</span><span class="n">urllib3</span><span class="o">.</span><span class="n">disable_warnings</span><span class="p">()</span>
+
+<span class="kn">import</span> <span class="nn">urllib</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="kn">as</span> <span class="nn">pd</span>
+
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">date</span><span class="p">,</span> <span class="n">timedelta</span>
+<span class="kn">from</span> <span class="nn">jinja2</span> <span class="kn">import</span> <span class="n">Environment</span><span class="p">,</span> <span class="n">FileSystemLoader</span>
+<span class="kn">from</span> <span class="nn">progressbar</span> <span class="kn">import</span> <span class="n">ProgressBar</span>
+<span class="kn">from</span> <span class="nn">string</span> <span class="kn">import</span> <span class="n">Template</span>
+
+
+<div class="viewcode-block" id="VWClient"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.VWClient">[docs]</a><span class="k">class</span> <span class="nc">VWClient</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Client class for interacting with a Virtual Watershed (VW). A VW</span>
+<span class="sd">    is essentially a structured database with certain rules for its</span>
+<span class="sd">    metadata and for uploading or inserting data.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># number of times to re-try an http request</span>
+    <span class="n">_retry_num</span> <span class="o">=</span> <span class="mi">3</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host_url</span><span class="p">,</span> <span class="n">uname</span><span class="p">,</span> <span class="n">passwd</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Initialize a new connection to the virtual watershed &quot;&quot;&quot;</span>
+
+        <span class="c"># Check our credentials</span>
+        <span class="n">auth_url</span> <span class="o">=</span> <span class="n">host_url</span> <span class="o">+</span> <span class="s">&quot;/apilogin&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sesh</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">session</span><span class="p">()</span>
+
+        <span class="n">l</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sesh</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">auth_url</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="p">(</span><span class="n">uname</span><span class="p">,</span> <span class="n">passwd</span><span class="p">),</span> <span class="n">verify</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+        <span class="n">l</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">uname</span> <span class="o">=</span> <span class="n">uname</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">passwd</span> <span class="o">=</span> <span class="n">passwd</span>
+
+        <span class="c"># Initialize URLS used by class methods</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">insert_dataset_url</span> <span class="o">=</span> <span class="n">host_url</span> <span class="o">+</span> <span class="s">&quot;/apps/vwp/datasets&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_upload_url</span> <span class="o">=</span> <span class="n">host_url</span> <span class="o">+</span> <span class="s">&quot;/apps/vwp/data&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">uuid_check_url</span> <span class="o">=</span> <span class="n">host_url</span> <span class="o">+</span> <span class="s">&quot;/apps/vwp/checkmodeluuid&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset_search_url</span> <span class="o">=</span> \
+            <span class="n">host_url</span> <span class="o">+</span> <span class="s">&quot;/apps/vwp/search/datasets.json?version=3&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">modelrun_search_url</span> <span class="o">=</span> \
+            <span class="n">host_url</span> <span class="o">+</span> <span class="s">&quot;/apps/vwp/search/modelruns.json?version=3&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">modelrun_delete_url</span> <span class="o">=</span> <span class="n">host_url</span> <span class="o">+</span> <span class="s">&quot;/apps/vwp/deletemodelid&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">new_run_url</span> <span class="o">=</span> <span class="n">host_url</span> <span class="o">+</span> <span class="s">&quot;/apps/vwp/newmodelrun&quot;</span>
+
+
+
+<div class="viewcode-block" id="VWClient.initialize_modelrun"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.initialize_modelrun">[docs]</a>    <span class="k">def</span> <span class="nf">initialize_modelrun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_run_name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                             <span class="n">researcher_name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">keywords</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Iniitalize a new model run.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_run_name (str): is the name for the new model run</span>
+
+<span class="sd">            description (str): a description of the new model run</span>
+
+<span class="sd">            researcher_name (str): contact person for the model run</span>
+
+<span class="sd">            keywords (str): comma-separated list of keywords associated with</span>
+<span class="sd">                model run</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (str) a newly-intialized model_run_uuid</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">description</span><span class="p">,</span> \
+            <span class="s">&quot;You must provide a description for your new model run&quot;</span>
+        <span class="k">assert</span> <span class="n">model_run_name</span><span class="p">,</span> \
+            <span class="s">&quot;You must provide a model_run_name for your new model run&quot;</span>
+        <span class="k">assert</span> <span class="n">researcher_name</span><span class="p">,</span> \
+            <span class="s">&quot;You must provide a researcher_name for your new model run&quot;</span>
+        <span class="k">assert</span> <span class="n">keywords</span><span class="p">,</span> \
+            <span class="s">&quot;You must provide keywords for your new model run&quot;</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;model_run_name&#39;</span><span class="p">:</span> <span class="n">model_run_name</span><span class="p">,</span>
+                <span class="s">&#39;description&#39;</span><span class="p">:</span> <span class="n">description</span><span class="p">,</span>
+                <span class="s">&#39;model_keywords&#39;</span><span class="p">:</span> <span class="n">keywords</span><span class="p">,</span>
+                <span class="s">&#39;researcher_name&#39;</span><span class="p">:</span> <span class="n">researcher_name</span><span class="p">}</span>
+
+        <span class="c"># TODO make this class-level</span>
+        <span class="n">auth</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uname</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">passwd</span><span class="p">)</span>
+
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sesh</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">new_run_url</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+                                <span class="n">auth</span><span class="o">=</span><span class="n">auth</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+        <span class="n">result</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+
+        <span class="n">model_run_uuid</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">text</span>
+
+        <span class="k">return</span> <span class="n">model_run_uuid</span>
+</div>
+<div class="viewcode-block" id="VWClient.modelrun_search"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.modelrun_search">[docs]</a>    <span class="k">def</span> <span class="nf">modelrun_search</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get a list of model runs in the database. Currently no actual &quot;search&quot;</span>
+<span class="sd">        (see, e.g. dataset_search) is available from the Virtual Watershed</span>
+<span class="sd">        Data API.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (QueryResult) A query result, containing total records matching,</span>
+<span class="sd">                the number of results returned (subtotal), and the records</span>
+<span class="sd">                themselves, which is a list of dict.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">full_url</span> <span class="o">=</span> <span class="n">_build_query</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">modelrun_search_url</span><span class="p">)</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sesh</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">full_url</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">QueryResult</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">json</span><span class="p">())</span>
+</div>
+<div class="viewcode-block" id="VWClient.dataset_search"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.dataset_search">[docs]</a>    <span class="k">def</span> <span class="nf">dataset_search</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Search the VW for JSON metadata records with matching parameters.</span>
+<span class="sd">        Use key, value pairs as specified in the `Virtual Watershed</span>
+<span class="sd">        Documentation</span>
+<span class="sd">        &lt;http://vwp-dev.unm.edu/docs/stable/search.html#search-objects&gt;`_</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (QueryResult) A query result, containing total records matching,</span>
+<span class="sd">                the number of results returned (subtotal), and the records</span>
+<span class="sd">                themselves, which is a list of dict.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">full_url</span> <span class="o">=</span> <span class="n">_build_query</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_search_url</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sesh</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">full_url</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">QueryResult</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">json</span><span class="p">())</span>
+</div>
+<div class="viewcode-block" id="VWClient.download"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.download">[docs]</a>    <span class="k">def</span> <span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">out_file</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Download a file from the VW using url to out_file on local disk</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            AssertionError: assert that the status code from downloading is 200</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+
+        <span class="k">assert</span> <span class="n">data</span><span class="o">.</span><span class="n">getcode</span><span class="p">()</span> <span class="o">==</span> <span class="mi">200</span><span class="p">,</span> <span class="s">&quot;Download Failed!&quot;</span>
+
+        <span class="k">with</span> <span class="nb">file</span><span class="p">(</span><span class="n">out_file</span><span class="p">,</span> <span class="s">&#39;w+&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">out</span><span class="p">:</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">writelines</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">readlines</span><span class="p">())</span>
+
+        <span class="k">return</span> <span class="bp">None</span>
+</div>
+<div class="viewcode-block" id="VWClient.insert_metadata"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.insert_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">insert_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">watershed_metadata</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Insert metadata to the virtual watershed. The data that gets</span>
+<span class="sd">            uploaded is the FGDC XML metadata.</span>
+
+<span class="sd">            Returns:</span>
+<span class="sd">                (requests.Response) Returned so that the user may inspect</span>
+<span class="sd">                the response.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">num_tries</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">num_tries</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_retry_num</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sesh</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">insert_dataset_url</span><span class="p">,</span>
+                                       <span class="n">data</span><span class="o">=</span><span class="n">watershed_metadata</span><span class="p">,</span>
+                                       <span class="n">auth</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uname</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">passwd</span><span class="p">),</span>
+                                       <span class="n">verify</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+                <span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+
+                <span class="n">result</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+                <span class="k">return</span> <span class="n">result</span>
+
+            <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">HTTPError</span><span class="p">:</span>
+                <span class="n">num_tries</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">continue</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+</div>
+<div class="viewcode-block" id="VWClient.upload"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.upload">[docs]</a>    <span class="k">def</span> <span class="nf">upload</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="p">,</span> <span class="n">data_file_path</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Upload data for a given model_run_uuid to the VW</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            requests.HTTPError: if the file cannot be successfully uploaded</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c"># currently &#39;name&#39; is unused</span>
+        <span class="n">dataPayload</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;name&#39;</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">data_file_path</span><span class="p">),</span>
+                       <span class="s">&#39;modelid&#39;</span><span class="p">:</span> <span class="n">model_run_uuid</span><span class="p">}</span>
+
+        <span class="n">num_tries</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">num_tries</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_retry_num</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> \
+                    <span class="bp">self</span><span class="o">.</span><span class="n">sesh</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_upload_url</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">dataPayload</span><span class="p">,</span>
+                                   <span class="n">files</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;file&#39;</span><span class="p">:</span> <span class="nb">open</span><span class="p">(</span><span class="n">data_file_path</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">)},</span>
+                                   <span class="n">auth</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uname</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">passwd</span><span class="p">),</span> <span class="n">verify</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+                <span class="n">result</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+                <span class="k">return</span> <span class="n">result</span>
+
+            <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">HTTPError</span><span class="p">:</span>
+                <span class="n">num_tries</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">continue</span>
+
+        <span class="k">raise</span> <span class="n">requests</span><span class="o">.</span><span class="n">HTTPError</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="VWClient.delete_modelrun"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.delete_modelrun">[docs]</a>    <span class="k">def</span> <span class="nf">delete_modelrun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Delete a model run associated with model_run_uuid</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (bool) True if successful, False if not</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">full_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">modelrun_delete_url</span> <span class="o">+</span> <span class="n">model_run_uuid</span>
+
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sesh</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">modelrun_delete_url</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;model_uuid&#39;</span><span class="p">:</span> <span class="n">model_run_uuid</span><span class="p">}),</span> <span class="n">verify</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+</div>
+<div class="viewcode-block" id="VWClient.create_new_user"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.create_new_user">[docs]</a>    <span class="k">def</span> <span class="nf">create_new_user</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">userid</span><span class="p">,</span> <span class="n">first_name</span><span class="p">,</span> <span class="n">last_name</span><span class="p">,</span> <span class="n">email</span><span class="p">,</span> <span class="n">password</span><span class="p">,</span>
+                        <span class="n">address1</span><span class="p">,</span> <span class="n">address2</span><span class="p">,</span> <span class="n">city</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">zipcode</span><span class="p">,</span> <span class="n">tel_voice</span><span class="p">,</span>
+                        <span class="n">country</span><span class="o">=</span><span class="s">&#39;USA&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a new virtual watershed user. This is only available to users</span>
+<span class="sd">        with admin status on the virtual waterhsed.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (bool) True if succesful, False if not</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">_build_query</span><span class="p">(</span><span class="n">search_route</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="s">&quot;build the end of a query by translating dict to key1=val1&amp;key2=val2...&quot;</span>
+    <span class="n">full_url</span> <span class="o">=</span> <span class="n">search_route</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">str</span><span class="p">:</span>
+            <span class="n">val</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+
+        <span class="n">full_url</span> <span class="o">+=</span> <span class="s">&quot;&amp;</span><span class="si">%s</span><span class="s">=</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">full_url</span>
+
+<div class="viewcode-block" id="QueryResult"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.QueryResult">[docs]</a><span class="k">class</span> <span class="nc">QueryResult</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Represents the response from the VW Data API search methods, , which gives three fields,</span>
+<span class="sd">    &#39;total&#39;, &#39;subtotal&#39;, and &#39;records&#39;, represented by the properties explained</span>
+<span class="sd">    in their own docstrings.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">json</span><span class="p">):</span>
+        <span class="c">#: raw json returned from the VW</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">json</span> <span class="o">=</span> <span class="n">json</span>
+        <span class="c">#: total results available on VW</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">total</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c">#: total results returned to client with the query</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subtotal</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c">#: a list of the results</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">records</span> <span class="o">=</span> <span class="n">json</span><span class="p">[</span><span class="s">&#39;results&#39;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="s">&#39;total&#39;</span> <span class="ow">in</span> <span class="n">json</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">total</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">json</span><span class="p">[</span><span class="s">&#39;total&#39;</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">total</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">json</span><span class="p">[</span><span class="s">&#39;results&#39;</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="s">&#39;subtotal&#39;</span> <span class="ow">in</span> <span class="n">json</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">subtotal</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">json</span><span class="p">[</span><span class="s">&#39;subtotal&#39;</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">subtotal</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">json</span><span class="p">[</span><span class="s">&#39;results&#39;</span><span class="p">])</span>
+
+</div>
+<div class="viewcode-block" id="default_vw_client"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.default_vw_client">[docs]</a><span class="k">def</span> <span class="nf">default_vw_client</span><span class="p">(</span><span class="n">config_file</span><span class="o">=</span><span class="s">&quot;default.conf&quot;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Use the credentials in config_file to initialize a new VWClient instance</span>
+
+<span class="sd">        Returns: VWClient connected to the ip address given in config_file</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">_get_config</span><span class="p">(</span><span class="n">config_file</span><span class="p">)</span>
+    <span class="n">conn</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s">&#39;Connection&#39;</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">VWClient</span><span class="p">(</span><span class="n">conn</span><span class="p">[</span><span class="s">&#39;watershed_url&#39;</span><span class="p">],</span> <span class="n">conn</span><span class="p">[</span><span class="s">&#39;user&#39;</span><span class="p">],</span> <span class="n">conn</span><span class="p">[</span><span class="s">&#39;pass&#39;</span><span class="p">])</span>
+
+</div>
+<span class="k">def</span> <span class="nf">_get_config</span><span class="p">(</span><span class="n">config_file</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Provide user with a ConfigParser that has read the `config_file`</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (ConfigParser) Config parser with three sections: &#39;Common&#39;,</span>
+<span class="sd">            &#39;FGDC Metadata&#39;, and &#39;Watershed Metadata&#39;</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">config_file</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">config_file</span> <span class="o">=</span> \
+            <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">__file__</span><span class="p">),</span> <span class="s">&#39;../default.conf&#39;</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">config_file</span><span class="p">),</span> <span class="s">&quot;Config file </span><span class="si">%s</span><span class="s"> does not exist!&quot;</span> \
+        <span class="o">%</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">config_file</span><span class="p">)</span>
+
+    <span class="n">config</span> <span class="o">=</span> <span class="n">configparser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">()</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">config_file</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">config</span>
+
+
+<div class="viewcode-block" id="metadata_from_file"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.metadata_from_file">[docs]</a><span class="k">def</span> <span class="nf">metadata_from_file</span><span class="p">(</span><span class="n">input_file</span><span class="p">,</span> <span class="n">parent_model_run_uuid</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="p">,</span>
+                       <span class="n">description</span><span class="p">,</span> <span class="n">watershed_name</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">start_datetime</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                       <span class="n">end_datetime</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">model_name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">fgdc_metadata</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                       <span class="n">model_set_type</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">model_set_taxonomy</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                       <span class="n">water_year_start</span><span class="o">=</span><span class="mi">2010</span><span class="p">,</span> <span class="n">water_year_end</span><span class="o">=</span><span class="mi">2011</span><span class="p">,</span>
+                       <span class="n">config_file</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate metadata for input_file.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        **kwargs: Set union of kwargs from make_fgdc_metadata and</span>
+<span class="sd">            make_watershed_metadata</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        (str) watershed metadata</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">dt</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="nb">issubclass</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">dt</span><span class="p">),</span> <span class="n">timedelta</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">config_file</span><span class="p">:</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">_get_config</span><span class="p">(</span><span class="n">config_file</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">_get_config</span><span class="p">(</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">__file__</span><span class="p">),</span> <span class="s">&#39;../default.conf&#39;</span><span class="p">))</span>
+
+    <span class="n">input_split</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">input_file</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;.&#39;</span><span class="p">)</span>
+
+    <span class="n">input_prefix</span> <span class="o">=</span> <span class="n">input_split</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">output_ext</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">input_file</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">dt_multiplier</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">input_split</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+    <span class="n">model_set</span> <span class="o">=</span> <span class="p">(</span><span class="s">&quot;outputs&quot;</span><span class="p">,</span> <span class="s">&quot;inputs&quot;</span><span class="p">)[</span><span class="n">input_prefix</span> <span class="o">==</span> <span class="s">&quot;in&quot;</span><span class="p">]</span>
+
+    <span class="n">start_datetime_str</span> <span class="o">=</span> <span class="s">&quot;&quot;</span>
+    <span class="n">end_datetime_str</span> <span class="o">=</span> <span class="s">&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">output_ext</span> <span class="o">==</span> <span class="s">&quot;.tif&quot;</span><span class="p">:</span>
+        <span class="n">model_vars</span> <span class="o">=</span> <span class="n">input_split</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">model_set_type</span> <span class="o">=</span> <span class="s">&quot;vis&quot;</span>
+
+    <span class="k">elif</span> <span class="n">model_name</span> <span class="o">==</span> <span class="s">&#39;isnobal&#39;</span><span class="p">:</span>
+<span class="c">#: ISNOBAL variable names to be looked up to make dataframes and write metadata</span>
+        <span class="n">VARNAME_DICT</span> <span class="o">=</span> \
+            <span class="p">{</span>
+                <span class="s">&#39;in&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;I_lw&quot;</span><span class="p">,</span> <span class="s">&quot;T_a&quot;</span><span class="p">,</span> <span class="s">&quot;e_a&quot;</span><span class="p">,</span> <span class="s">&quot;u&quot;</span><span class="p">,</span> <span class="s">&quot;T_g&quot;</span><span class="p">,</span> <span class="s">&quot;S_n&quot;</span><span class="p">],</span>
+                <span class="s">&#39;em&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;R_n&quot;</span><span class="p">,</span> <span class="s">&quot;H&quot;</span><span class="p">,</span> <span class="s">&quot;L_v_E&quot;</span><span class="p">,</span> <span class="s">&quot;G&quot;</span><span class="p">,</span> <span class="s">&quot;M&quot;</span><span class="p">,</span> <span class="s">&quot;delta_Q&quot;</span><span class="p">,</span> <span class="s">&quot;E_s&quot;</span><span class="p">,</span> <span class="s">&quot;melt&quot;</span><span class="p">,</span>
+                       <span class="s">&quot;ro_predict&quot;</span><span class="p">,</span> <span class="s">&quot;cc_s&quot;</span><span class="p">],</span>
+                <span class="s">&#39;snow&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;z_s&quot;</span><span class="p">,</span> <span class="s">&quot;rho&quot;</span><span class="p">,</span> <span class="s">&quot;m_s&quot;</span><span class="p">,</span> <span class="s">&quot;h2o&quot;</span><span class="p">,</span> <span class="s">&quot;T_s_0&quot;</span><span class="p">,</span> <span class="s">&quot;T_s_l&quot;</span><span class="p">,</span> <span class="s">&quot;T_s&quot;</span><span class="p">,</span>
+                         <span class="s">&quot;z_s_l&quot;</span><span class="p">,</span> <span class="s">&quot;h2o_sat&quot;</span><span class="p">]</span>
+            <span class="p">}</span>
+        <span class="n">model_vars</span> <span class="o">=</span> <span class="s">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">VARNAME_DICT</span><span class="p">[</span><span class="n">input_prefix</span><span class="p">])</span>
+
+
+        <span class="n">fgdc_metadata</span> <span class="o">=</span> <span class="n">make_fgdc_metadata</span><span class="p">(</span><span class="n">input_file</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span>
+                                           <span class="n">model_run_uuid</span><span class="p">,</span> <span class="n">start_datetime</span><span class="p">,</span>
+                                           <span class="n">end_datetime</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;File was not an iSNOBAL file or a geotiff. File not supported&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">dt</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">dt</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">(</span><span class="s">&#39;1 hour&#39;</span><span class="p">)</span>
+
+    <span class="c"># calculate the &quot;dates&quot; fields for the watershed JSON metadata</span>
+    <span class="n">start_dt</span> <span class="o">=</span> <span class="n">dt</span> <span class="o">*</span> <span class="n">dt_multiplier</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">start_datetime</span> <span class="ow">and</span> <span class="n">end_datetime</span><span class="p">):</span>
+        <span class="n">start_datetime</span> <span class="o">=</span> <span class="n">datetime</span><span class="p">(</span><span class="n">water_year_start</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mo">01</span><span class="p">)</span> <span class="o">+</span> <span class="n">start_dt</span>
+        <span class="n">start_datetime_str</span> <span class="o">=</span> <span class="n">start_datetime</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s">&#39;%Y-%m-</span><span class="si">%d</span><span class="s"> %H:%M:%S&#39;</span><span class="p">)</span>
+
+        <span class="n">end_datetime</span> <span class="o">=</span> <span class="n">start_datetime</span> <span class="o">+</span> <span class="n">dt</span>
+        <span class="n">end_datetime_str</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="n">start_datetime</span> <span class="o">+</span> <span class="n">dt</span><span class="p">,</span>
+                                         <span class="s">&#39;%Y-%m-</span><span class="si">%d</span><span class="s"> %H:%M:%S&#39;</span><span class="p">)</span>
+
+    <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">start_datetime</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="n">end_datetime</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">start_datetime_str</span> <span class="o">=</span> <span class="n">start_datetime</span>
+        <span class="n">end_datetime_str</span> <span class="o">=</span> <span class="n">end_datetime</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s">&#39;bad start_ and/or end_datetime arguments&#39;</span><span class="p">)</span>
+
+    <span class="n">js</span> <span class="o">=</span>  \
+        <span class="n">make_watershed_metadata</span><span class="p">(</span><span class="n">input_file</span><span class="p">,</span>
+                                <span class="n">config</span><span class="p">,</span>
+                                <span class="n">parent_model_run_uuid</span><span class="p">,</span>
+                                <span class="n">model_run_uuid</span><span class="p">,</span>
+                                <span class="n">model_set</span><span class="p">,</span>
+                                <span class="n">watershed_name</span><span class="p">,</span>
+                                <span class="n">state</span><span class="p">,</span>
+                                <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
+                                <span class="n">model_set_type</span><span class="o">=</span><span class="n">model_set_type</span><span class="p">,</span>
+                                <span class="n">model_set_taxonomy</span><span class="o">=</span><span class="s">&#39;grid&#39;</span><span class="p">,</span>
+                                <span class="n">fgdc_metadata</span><span class="o">=</span><span class="n">fgdc_metadata</span><span class="p">,</span>
+                                <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
+                                <span class="n">model_vars</span><span class="o">=</span><span class="n">model_vars</span><span class="p">,</span>
+                                <span class="n">start_datetime</span><span class="o">=</span><span class="n">start_datetime_str</span><span class="p">,</span>
+                                <span class="n">end_datetime</span><span class="o">=</span><span class="n">end_datetime_str</span><span class="p">,</span>
+                                <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">js</span>
+
+</div>
+<div class="viewcode-block" id="upsert"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.upsert">[docs]</a><span class="k">def</span> <span class="nf">upsert</span><span class="p">(</span><span class="n">input_path</span><span class="p">,</span> <span class="n">watershed_name</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span>
+           <span class="n">model_run_name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">keywords</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+           <span class="n">parent_model_run_uuid</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">model_name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+           <span class="n">model_set_type</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">ext</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">config_file</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Upload the file or files located at input_path, which could be a</span>
+<span class="sd">       directory. This function also creates and inserts metadata records for</span>
+<span class="sd">       every file as required by the virtual watershed.</span>
+
+<span class="sd">    Inputs:</span>
+<span class="sd">        input_path (str): Directorty or file to upload</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        (str, str): A two-tuple of parent_model_run_uuid and model_run_uuid</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="p">(</span><span class="n">model_run_uuid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="n">parent_model_run_uuid</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">),</span>\
+        <span class="s">&quot;If model_run_uuid is given, its parent must also be given!&quot;</span>
+
+    <span class="c"># redundant, but better to catch this before we continue</span>
+    <span class="k">assert</span> <span class="n">dt</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="nb">issubclass</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">dt</span><span class="p">),</span> <span class="n">timedelta</span><span class="p">)</span>
+
+    <span class="c"># get the configuration file path if not given</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">config_file</span><span class="p">:</span>
+        <span class="n">config_file</span> <span class="o">=</span> \
+            <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">__file__</span><span class="p">),</span> <span class="s">&#39;../default.conf&#39;</span><span class="p">)</span>
+
+    <span class="c"># build a list of files to be upserted</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">input_path</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="n">input_path</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="s">&#39;/&#39;</span><span class="p">:</span>
+            <span class="n">input_path</span> <span class="o">+=</span> <span class="s">&#39;/&#39;</span>
+
+        <span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">input_path</span> <span class="o">+</span> <span class="n">el</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">input_path</span><span class="p">)</span>
+                 <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">input_path</span> <span class="o">+</span> <span class="n">el</span><span class="p">)]</span>
+
+    <span class="k">elif</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">input_path</span><span class="p">):</span>
+        <span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">input_path</span><span class="p">]</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">os</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">input_path</span> <span class="o">+</span> <span class="s">&quot; is not a valid file or directory!&quot;</span><span class="p">)</span>
+
+
+    <span class="c"># initialize the vw_client manually (not defuault) since we need</span>
+    <span class="c"># config info</span>
+    <span class="n">conn</span> <span class="o">=</span> <span class="n">_get_config</span><span class="p">(</span><span class="n">config_file</span><span class="p">)[</span><span class="s">&#39;Connection&#39;</span><span class="p">]</span>
+
+    <span class="n">vw_client</span> <span class="o">=</span> <span class="n">VWClient</span><span class="p">(</span><span class="n">conn</span><span class="p">[</span><span class="s">&#39;watershed_url&#39;</span><span class="p">],</span> <span class="n">conn</span><span class="p">[</span><span class="s">&#39;user&#39;</span><span class="p">],</span> <span class="n">conn</span><span class="p">[</span><span class="s">&#39;pass&#39;</span><span class="p">])</span>
+
+    <span class="c"># get either parent_model_run_uuid and/or model_run_uuid if need be</span>
+    <span class="c"># final case to handle is if model_run_uuid is given but not its parent</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">parent_model_run_uuid</span><span class="p">:</span>
+        <span class="n">parent_model_run_uuid</span> <span class="o">=</span> \
+            <span class="n">vw_client</span><span class="o">.</span><span class="n">initialize_modelrun</span><span class="p">(</span><span class="n">model_run_name</span><span class="o">=</span><span class="n">model_run_name</span><span class="p">,</span>
+               <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span> <span class="n">keywords</span><span class="o">=</span><span class="n">keywords</span><span class="p">,</span>
+               <span class="n">researcher_name</span><span class="o">=</span><span class="n">_get_config</span><span class="p">(</span><span class="n">config_file</span><span class="p">)[</span><span class="s">&#39;Researcher&#39;</span><span class="p">][</span><span class="s">&#39;researcher_name&#39;</span><span class="p">])</span>
+
+        <span class="n">model_run_uuid</span> <span class="o">=</span> <span class="n">parent_model_run_uuid</span>
+
+    <span class="k">elif</span> <span class="ow">not</span> <span class="n">model_run_uuid</span> <span class="ow">and</span> <span class="n">parent_model_run_uuid</span><span class="p">:</span>
+        <span class="n">model_run_uuid</span> <span class="o">=</span> \
+            <span class="n">vw_client</span><span class="o">.</span><span class="n">initialize_modelrun</span><span class="p">(</span><span class="n">model_run_name</span><span class="o">=</span><span class="n">model_run_name</span><span class="p">,</span>
+                                           <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
+                                           <span class="n">keywords</span><span class="o">=</span><span class="n">keywords</span><span class="p">,</span>
+                                           <span class="n">researcher_name</span><span class="o">=</span><span class="n">commonConfig</span><span class="p">[</span><span class="s">&#39;researcherName&#39;</span><span class="p">]</span>
+                                           <span class="p">)</span>
+
+    <span class="c"># closure to do the upsert on each file</span>
+    <span class="k">def</span> <span class="nf">_upsert</span><span class="p">(</span><span class="n">file_</span><span class="p">):</span>
+        <span class="n">js</span> <span class="o">=</span> <span class="n">metadata_from_file</span><span class="p">(</span><span class="n">file_</span><span class="p">,</span> <span class="n">parent_model_run_uuid</span><span class="p">,</span>
+                                  <span class="n">model_run_uuid</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">watershed_name</span><span class="p">,</span>
+                                  <span class="n">state</span><span class="p">,</span> <span class="n">model_set_type</span><span class="o">=</span><span class="n">model_set_type</span><span class="p">,</span>
+                                  <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span> <span class="n">ext</span><span class="o">=</span><span class="n">ext</span><span class="p">,</span>
+                                  <span class="n">config_file</span><span class="o">=</span><span class="n">config_file</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">)</span>
+
+        <span class="n">vw_client</span><span class="o">.</span><span class="n">upload</span><span class="p">(</span><span class="n">model_run_uuid</span><span class="p">,</span> <span class="n">file_</span><span class="p">)</span>
+        <span class="n">vw_client</span><span class="o">.</span><span class="n">insert_metadata</span><span class="p">(</span><span class="n">js</span><span class="p">)</span>
+
+    <span class="k">print</span> <span class="s">&quot;upserting file(s) from </span><span class="si">%s</span><span class="s"> with model_run_uuid </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> \
+        <span class="p">(</span><span class="n">input_path</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="p">)</span>
+
+    <span class="c"># with ProgressBar(maxval=len(files)) as progress:</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">file_</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">files</span><span class="p">):</span>
+        <span class="n">_upsert</span><span class="p">(</span><span class="n">file_</span><span class="p">)</span>
+            <span class="c"># progress.update(i)</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="n">parent_model_run_uuid</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="make_fgdc_metadata"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.make_fgdc_metadata">[docs]</a><span class="k">def</span> <span class="nf">make_fgdc_metadata</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="p">,</span> <span class="n">beg_date</span><span class="p">,</span> <span class="n">end_date</span><span class="p">,</span>
+                       <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    For a single `data_file`, write the XML FGDC metadata</span>
+<span class="sd">       valid kwargs:</span>
+<span class="sd">           proc_date: date data was processed</span>
+
+<span class="sd">           theme_key: thematic keywords</span>
+
+<span class="sd">           model: scientific model, e.g., WindNinja, iSNOBAL, PRMS, etc.</span>
+
+<span class="sd">           researcher_name: name of researcher</span>
+
+<span class="sd">           mailing_address: researcher&#39;s mailing address</span>
+
+<span class="sd">           city: research institute city</span>
+
+<span class="sd">           state: research institute state</span>
+
+<span class="sd">           zip_code: research institute zip code</span>
+
+<span class="sd">           researcher_phone: researcher phone number</span>
+
+<span class="sd">           row_count: number of rows in dataset</span>
+
+<span class="sd">           column_count: number of columns in dataset</span>
+
+<span class="sd">           lat_res: resolution in latitude direction (meters)</span>
+
+<span class="sd">           lon_res: resolution in longitude direction (meters)</span>
+
+<span class="sd">           map_units: distance units of the map (e.g. &#39;m&#39;)</span>
+
+<span class="sd">           west_bound: westernmost longitude of bounding box</span>
+
+<span class="sd">           east_bound: easternmost longitude of bounding box</span>
+
+<span class="sd">           north_bound: northernmost latitude of bounding box</span>
+
+<span class="sd">           south_bound: southernmost latitude of bounding box</span>
+
+<span class="sd">           file_ext: extension of file used to fill out digtinfo:formname;</span>
+<span class="sd">            if not specified, make_fgdc_metadata takes extension</span>
+
+<span class="sd">        Any other kwargs will be ignored</span>
+
+<span class="sd">    Returns: XML FGDC metadata string</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">statinfo</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">file_name</span><span class="p">)</span>
+        <span class="n">file_size</span> <span class="o">=</span> <span class="s">&quot;</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">statinfo</span><span class="o">.</span><span class="n">st_size</span><span class="o">/</span><span class="mi">1000000</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+        <span class="n">file_size</span> <span class="o">=</span> <span class="s">&quot;NA&quot;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">config</span><span class="p">:</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">_get_config</span><span class="p">(</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">__file__</span><span class="p">),</span> <span class="s">&#39;../default.conf&#39;</span><span class="p">))</span>
+
+    <span class="c"># handle missing required fields not provided in kwargs</span>
+    <span class="n">geoconf</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s">&#39;Geo&#39;</span><span class="p">]</span>
+    <span class="n">resconf</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s">&#39;Researcher&#39;</span><span class="p">]</span>
+
+    <span class="c"># if any of the bounding boxes are not given, all go to default</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="s">&#39;west_bound&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="s">&#39;east_bound&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span>
+            <span class="ow">and</span> <span class="s">&#39;north_bound&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="s">&#39;south_bound&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;west_bound&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geoconf</span><span class="p">[</span><span class="s">&#39;default_west_bound&#39;</span><span class="p">]</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;east_bound&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geoconf</span><span class="p">[</span><span class="s">&#39;default_east_bound&#39;</span><span class="p">]</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;north_bound&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geoconf</span><span class="p">[</span><span class="s">&#39;default_north_bound&#39;</span><span class="p">]</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;south_bound&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geoconf</span><span class="p">[</span><span class="s">&#39;default_south_bound&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="s">&#39;proc_date&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;proc_date&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">date</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">(),</span> <span class="s">&#39;%Y-%m-</span><span class="si">%d</span><span class="s">&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="s">&#39;researcher_name&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;researcher_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">resconf</span><span class="p">[</span><span class="s">&#39;researcher_name&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="s">&#39;mailing_address&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;mailing_address&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">resconf</span><span class="p">[</span><span class="s">&#39;mailing_address&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="s">&#39;city&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;city&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">resconf</span><span class="p">[</span><span class="s">&#39;city&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="s">&#39;state&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;state&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">resconf</span><span class="p">[</span><span class="s">&#39;state&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="s">&#39;zip_code&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;zip_code&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">resconf</span><span class="p">[</span><span class="s">&#39;zip_code&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="s">&#39;researcher_phone&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;researcher_phone&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">resconf</span><span class="p">[</span><span class="s">&#39;phone&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="s">&#39;researcher_email&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;researcher_email&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">resconf</span><span class="p">[</span><span class="s">&#39;email&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="s">&#39;file_ext&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;file_ext&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">file_name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">template_env</span> <span class="o">=</span> <span class="n">Environment</span><span class="p">(</span><span class="n">loader</span><span class="o">=</span><span class="n">FileSystemLoader</span><span class="p">(</span>
+                               <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">__file__</span><span class="p">),</span> <span class="s">&#39;../templates&#39;</span><span class="p">)))</span>
+
+    <span class="n">template</span> <span class="o">=</span> <span class="n">template_env</span><span class="o">.</span><span class="n">get_template</span><span class="p">(</span><span class="s">&#39;fgdc_template.xml&#39;</span><span class="p">)</span>
+
+    <span class="n">output</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">file_name</span><span class="o">=</span><span class="n">file_name</span><span class="p">,</span>
+                             <span class="n">file_size</span><span class="o">=</span><span class="n">file_size</span><span class="p">,</span>
+                             <span class="n">model_run_uuid</span><span class="o">=</span><span class="n">model_run_uuid</span><span class="p">,</span>
+                             <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">output</span>
+
+</div>
+<div class="viewcode-block" id="make_watershed_metadata"><a class="viewcode-back" href="../../../watershed.html#wcwave_adaptors.wcwave_adaptors.watershed.make_watershed_metadata">[docs]</a><span class="k">def</span> <span class="nf">make_watershed_metadata</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">parent_model_run_uuid</span><span class="p">,</span>
+                            <span class="n">model_run_uuid</span><span class="p">,</span> <span class="n">model_set</span><span class="p">,</span> <span class="n">watershed_name</span><span class="p">,</span>
+                            <span class="n">state</span><span class="p">,</span> <span class="n">fgdc_metadata</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                            <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+    <span class="sd">&quot;&quot;&quot; For a single `file_name`, write the corresponding Virtual Watershed JSON</span>
+<span class="sd">        metadata.</span>
+
+<span class="sd">        valid kwargs:</span>
+<span class="sd">            orig_epsg: original EPSG code of projection</span>
+
+<span class="sd">            epsg: current EPSG code</span>
+
+<span class="sd">            taxonomy: likely &#39;file&#39;; representation of the data</span>
+
+<span class="sd">            model_vars: variable(s) represented in the data</span>
+
+<span class="sd">            model_set: &#39;inputs&#39; or &#39;outputs&#39;; AssertionError if not</span>
+
+<span class="sd">            model_set_type: e.g., &#39;binary&#39;, &#39;csv&#39;, &#39;tif&#39;, etc.</span>
+
+<span class="sd">            model_set_taxonomy: &#39;grid&#39;, &#39;vector&#39;, etc.</span>
+
+<span class="sd">            west_bound: westernmost longitude of bounding box</span>
+
+<span class="sd">            east_bound: easternmost longitude of bounding box</span>
+
+<span class="sd">            north_bound: northernmost latitude of bounding box</span>
+
+<span class="sd">            south_bound: southernmost latitude of bounding box</span>
+
+<span class="sd">            start_datetime: datetime observations began, formatted like &quot;2010-01-01 22:00:00&quot;</span>
+
+<span class="sd">            end_datetime: datetime observations ended, formatted like &quot;2010-01-01 22:00:00&quot;</span>
+
+<span class="sd">            wms: True if wms service can and should be enabled</span>
+
+<span class="sd">            wcs: True if wcs service can and should be enabled</span>
+
+<span class="sd">            watershed_name: Name of watershed, e.g. &#39;Dry Creek&#39; or &#39;Lehman Creek&#39;</span>
+
+<span class="sd">            model_name: Name of model, if applicaple; e.g. &#39;iSNOBAL&#39;, &#39;PRMS&#39;</span>
+
+<span class="sd">            mimetype: defaults to application/octet-stream</span>
+
+<span class="sd">            ext: extension to be associated with the dataset; make_watershed_metadata</span>
+<span class="sd">             will take the extension of file_name if not given explicitly</span>
+
+<span class="sd">            fgdc_metadata: FGDC md probably created by make_fgdc_metadata; if not</span>
+<span class="sd">             given, a default version is created (see source for details)</span>
+
+<span class="sd">        Returns: JSON metadata string</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">model_set</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&quot;inputs&quot;</span><span class="p">,</span> <span class="s">&quot;outputs&quot;</span><span class="p">],</span> <span class="s">&quot;parameter model_set must be </span><span class="se">\</span>
+<span class="s">            either &#39;inputs&#39; or &#39;outputs&#39;, not </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">model_set</span>
+
+    <span class="c"># TODO get valid_states and valid_watersheds from VW w/ TODO VWClient method</span>
+    <span class="n">valid_states</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;Idaho&#39;</span><span class="p">,</span> <span class="s">&#39;Nevada&#39;</span><span class="p">,</span> <span class="s">&#39;New Mexico&#39;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">valid_states</span><span class="p">,</span> <span class="s">&quot;state passed was &quot;</span> <span class="o">+</span> <span class="n">state</span> <span class="o">+</span> \
+            <span class="s">&quot;. Must be one of &quot;</span> <span class="o">+</span> <span class="s">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">valid_states</span><span class="p">)</span>
+
+    <span class="n">valid_watersheds</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;Dry Creek&#39;</span><span class="p">,</span> <span class="s">&#39;Jemez Caldera&#39;</span><span class="p">,</span> <span class="s">&#39;Lehman Creek&#39;</span><span class="p">,</span> <span class="s">&#39;Reynolds Creek&#39;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">watershed_name</span> <span class="ow">in</span> <span class="n">valid_watersheds</span><span class="p">,</span> <span class="s">&quot;watershed passed was &quot;</span> <span class="o">+</span> \
+            <span class="n">watershed_name</span> <span class="o">+</span> <span class="s">&quot;. Must be one of &quot;</span> <span class="o">+</span> <span class="s">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">valid_watersheds</span><span class="p">)</span>
+
+    <span class="c"># logic to figure out mimetype and such based on extension</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">ext</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">file_name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">ext</span> <span class="o">==</span> <span class="s">&#39;.tif&#39;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s">&#39;wcs&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;wcs&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
+        <span class="k">if</span> <span class="s">&#39;wms&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;wms&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
+        <span class="k">if</span> <span class="s">&#39;tax&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;tax&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;geoimage&#39;</span>
+        <span class="k">if</span> <span class="s">&#39;ext&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;ext&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;tif&#39;</span>
+        <span class="k">if</span> <span class="s">&#39;mimetype&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;mimetype&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;application/x-zip-compressed&#39;</span>
+        <span class="k">if</span> <span class="s">&#39;model_set_type&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;model_set_type&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;vis&#39;</span>
+
+    <span class="k">if</span> <span class="s">&#39;ext&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;ext&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ext</span>
+
+    <span class="k">if</span> <span class="s">&#39;mimetype&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;mimetype&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;application/octet-stream&#39;</span>
+
+    <span class="c"># If one of the datetimes is missing</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="s">&#39;start_datetime&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="s">&#39;end_datetime&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;start_datetime&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&quot;1970-10-01 00:00:00&quot;</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;end_datetime&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&quot;1970-10-01 01:00:00&quot;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">fgdc_metadata</span><span class="p">:</span>
+
+        <span class="n">fgdc_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span><span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span>
+                       <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;start_datetime&#39;</span><span class="p">,</span> <span class="s">&#39;end_datetime&#39;</span><span class="p">]}</span>
+        <span class="c"># can just include all remaining kwargs; no problem if they go unused</span>
+        <span class="n">fgdc_metadata</span> <span class="o">=</span> <span class="n">make_fgdc_metadata</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="p">,</span>
+                                           <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;start_datetime&#39;</span><span class="p">],</span>
+                                           <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;end_datetime&#39;</span><span class="p">],</span>
+                                           <span class="o">**</span><span class="n">fgdc_kwargs</span><span class="p">)</span>
+
+
+    <span class="n">basename</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">file_name</span><span class="p">)</span>
+
+    <span class="n">geo_config</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s">&#39;Geo&#39;</span><span class="p">]</span>
+
+    <span class="n">firstTwoUUID</span> <span class="o">=</span> <span class="n">model_run_uuid</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">input_file_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s">&quot;/geodata/watershed-data&quot;</span><span class="p">,</span>
+                                 <span class="n">firstTwoUUID</span><span class="p">,</span>
+                                 <span class="n">model_run_uuid</span><span class="p">,</span>
+                                 <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">file_name</span><span class="p">))</span>
+
+    <span class="c"># properly escape xml metadata escape chars</span>
+    <span class="n">fgdc_metadata</span> <span class="o">=</span> \
+        <span class="n">fgdc_metadata</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\</span><span class="s">n&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\t</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\</span><span class="s">t&#39;</span><span class="p">)</span>
+
+    <span class="n">geoconf</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s">&#39;Geo&#39;</span><span class="p">]</span>
+    <span class="n">resconf</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s">&#39;Researcher&#39;</span><span class="p">]</span>
+
+    <span class="c"># if any of the bounding boxes are not given, all go to default</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="s">&#39;west_bound&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="s">&#39;east_bound&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span>
+            <span class="ow">and</span> <span class="s">&#39;north_bound&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="s">&#39;south_bound&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;west_bound&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geoconf</span><span class="p">[</span><span class="s">&#39;default_west_bound&#39;</span><span class="p">]</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;east_bound&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geoconf</span><span class="p">[</span><span class="s">&#39;default_east_bound&#39;</span><span class="p">]</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;north_bound&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geoconf</span><span class="p">[</span><span class="s">&#39;default_north_bound&#39;</span><span class="p">]</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;south_bound&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geoconf</span><span class="p">[</span><span class="s">&#39;default_south_bound&#39;</span><span class="p">]</span>
+
+    <span class="c"># write the metadata for a file</span>
+    <span class="c"># output = template.substitute(# determined by file ext, set within function</span>
+    <span class="n">template_env</span> <span class="o">=</span> <span class="n">Environment</span><span class="p">(</span><span class="n">loader</span><span class="o">=</span><span class="n">FileSystemLoader</span><span class="p">(</span>
+                               <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">__file__</span><span class="p">),</span>
+                                            <span class="s">&#39;../templates&#39;</span><span class="p">)))</span>
+
+    <span class="n">template</span> <span class="o">=</span> <span class="n">template_env</span><span class="o">.</span><span class="n">get_template</span><span class="p">(</span><span class="s">&#39;watershed_template.json&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s">&#39;wcs&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;wcs&#39;</span><span class="p">]:</span>
+        <span class="n">wcs_str</span> <span class="o">=</span> <span class="s">&#39;wcs&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">wcs_str</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="k">if</span> <span class="s">&#39;wms&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;wms&#39;</span><span class="p">]:</span>
+        <span class="n">wms_str</span> <span class="o">=</span> <span class="s">&#39;wms&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">wms_str</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="n">output</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">basename</span><span class="o">=</span><span class="n">basename</span><span class="p">,</span>
+                             <span class="n">parent_model_run_uuid</span><span class="o">=</span><span class="n">parent_model_run_uuid</span><span class="p">,</span>
+                             <span class="n">model_run_uuid</span><span class="o">=</span><span class="n">model_run_uuid</span><span class="p">,</span>
+                             <span class="n">model_set</span><span class="o">=</span><span class="n">model_set</span><span class="p">,</span>
+                             <span class="n">watershed_name</span><span class="o">=</span><span class="n">watershed_name</span><span class="p">,</span>
+                             <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                             <span class="n">wcs_str</span><span class="o">=</span><span class="n">wcs_str</span><span class="p">,</span>
+                             <span class="n">wms_str</span><span class="o">=</span><span class="n">wms_str</span><span class="p">,</span>
+                             <span class="n">input_file_path</span><span class="o">=</span><span class="n">input_file_path</span><span class="p">,</span>
+                             <span class="n">fgdc_metadata</span><span class="o">=</span><span class="n">fgdc_metadata</span><span class="p">,</span>
+                             <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">output</span>
+</pre></div></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../../../index.html">
+              <img class="logo" src="../../../_static/wc_wave_triangles.png" alt="Logo"/>
+            </a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Tri-State EPSCoR: WC-WAVE.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.4</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

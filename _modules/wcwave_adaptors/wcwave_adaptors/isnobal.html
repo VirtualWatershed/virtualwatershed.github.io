@@ -1,0 +1,1353 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>wcwave_adaptors.wcwave_adaptors.isnobal &mdash; VW Python API</title>
+    
+    <link rel="stylesheet" href="../../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '1.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="VW Python API" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">VW Python API</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for wcwave_adaptors.wcwave_adaptors.isnobal</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Tools for working with IPW binary data and running the iSNOBAL model.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="c">#</span>
+<span class="c"># Copyright (c) 2014, Matthew Turner (maturner01.gmail.com)</span>
+<span class="c">#</span>
+<span class="c"># For the Tri-state EPSCoR Track II WC-WAVE Project</span>
+<span class="c">#</span>
+
+<span class="c"># Acknowledgements to Robert Lew for inspiration in the design of the IPW</span>
+<span class="c"># class (see https://github.com/rogerlew/RL_GIS_Sandbox/tree/master/isnobal).</span>
+<span class="c">#</span>
+<span class="kn">import</span> <span class="nn">datetime</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">subprocess</span>
+<span class="kn">import</span> <span class="nn">struct</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">namedtuple</span><span class="p">,</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="n">zeros</span><span class="p">,</span> <span class="n">ravel</span><span class="p">,</span> <span class="n">reshape</span><span class="p">,</span> <span class="n">fromstring</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">floor</span><span class="p">,</span> <span class="n">log10</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="nb">sum</span> <span class="k">as</span> <span class="n">npsum</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="nb">round</span> <span class="k">as</span> <span class="n">npround</span>
+<span class="kn">from</span> <span class="nn">numpy.ma.core</span> <span class="kn">import</span> <span class="n">MaskedArray</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">mkdir</span><span class="p">,</span> <span class="n">listdir</span>
+<span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">exists</span><span class="p">,</span> <span class="n">dirname</span><span class="p">,</span> <span class="n">basename</span>
+<span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">join</span> <span class="k">as</span> <span class="n">osjoin</span>
+<span class="kn">from</span> <span class="nn">pandas</span> <span class="kn">import</span> <span class="n">date_range</span><span class="p">,</span> <span class="n">DataFrame</span><span class="p">,</span> <span class="n">Series</span><span class="p">,</span> <span class="n">Timedelta</span>
+<span class="kn">from</span> <span class="nn">progressbar</span> <span class="kn">import</span> <span class="n">ProgressBar</span>
+<span class="kn">from</span> <span class="nn">shutil</span> <span class="kn">import</span> <span class="n">rmtree</span>
+
+<span class="kn">from</span> <span class="nn">.watershed</span> <span class="kn">import</span> <span class="p">(</span><span class="n">_get_config</span><span class="p">,</span> <span class="n">make_fgdc_metadata</span><span class="p">,</span>
+                                       <span class="n">make_watershed_metadata</span><span class="p">)</span>
+
+<span class="kn">from</span> <span class="nn">.netcdf</span> <span class="kn">import</span> <span class="n">ncgen_from_template</span>
+
+
+<span class="c">#: IPW standard. assumed unchanging since they&#39;ve been the same for 20 years</span>
+<span class="n">BAND_TYPE_LOC</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">BAND_INDEX_LOC</span> <span class="o">=</span> <span class="mi">2</span>
+
+<span class="c">#: For converting NetCDF to iSNOBAL, use 2 bytes for all variables except mask</span>
+<span class="n">NC_NBYTES</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">NC_NBITS</span> <span class="o">=</span> <span class="mi">16</span>
+<span class="n">NC_MAXINT</span> <span class="o">=</span> <span class="nb">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">NC_NBITS</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+<span class="c">#: Container for ISNOBAL Global Band information</span>
+<span class="n">GlobalBand</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s">&quot;GlobalBand&quot;</span><span class="p">,</span> <span class="s">&#39;byteorder nLines nSamps nBands&#39;</span><span class="p">)</span>
+
+<span class="c">#: Check if a header is starting</span>
+<span class="n">IsHeaderStart</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">headerLine</span><span class="p">:</span> <span class="n">headerLine</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&quot;!&lt;header&gt;&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">AssertISNOBALInput</span><span class="p">(</span><span class="n">nc</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Check if a NetCDF conforms to iSNOBAL requirements for running that</span>
+<span class="sd">       model. Throw a ISNOBALNetcdfError if not</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">nca</span> <span class="o">=</span> <span class="n">nc</span><span class="o">.</span><span class="n">ncattrs</span><span class="p">()</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;data_tstep&#39;</span> <span class="ow">in</span> <span class="n">nca</span> <span class="ow">and</span> <span class="s">&#39;nsteps&#39;</span> <span class="ow">in</span> <span class="n">nca</span> <span class="ow">and</span>
+             <span class="s">&#39;output_frequency&#39;</span> <span class="ow">in</span> <span class="n">nca</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">valid</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ISNOBALNetcdfError</span><span class="p">(</span><span class="s">&quot;Attributes &#39;data_tstep&#39;, &#39;nsteps&#39;, &quot;</span> <span class="o">+</span>
+                                 <span class="s">&quot;&#39;output_frequency&#39;, &#39;bline&#39;, &#39;bsamp&#39;, &quot;</span> <span class="o">+</span>
+                                 <span class="s">&quot;&#39;dline&#39;, and &#39;dsamp&#39; not all in NetCDF&quot;</span><span class="p">)</span>
+
+    <span class="n">ncv</span> <span class="o">=</span> <span class="n">nc</span><span class="o">.</span><span class="n">variables</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;alt&#39;</span> <span class="ow">in</span> <span class="n">ncv</span> <span class="ow">and</span> <span class="s">&#39;mask&#39;</span> <span class="ow">in</span> <span class="n">ncv</span> <span class="ow">and</span> <span class="s">&#39;time&#39;</span> <span class="ow">in</span> <span class="n">ncv</span> <span class="ow">and</span>
+             <span class="s">&#39;easting&#39;</span> <span class="ow">in</span> <span class="n">ncv</span> <span class="ow">and</span> <span class="s">&#39;northing&#39;</span> <span class="ow">in</span> <span class="n">ncv</span> <span class="ow">and</span> <span class="s">&#39;lat&#39;</span> <span class="ow">in</span> <span class="n">ncv</span> <span class="ow">and</span>
+             <span class="s">&#39;lon&#39;</span> <span class="ow">in</span> <span class="n">ncv</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">valid</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ISNOBALNetcdfError</span><span class="p">(</span><span class="s">&quot;Variables &#39;alt&#39;, &#39;mask&#39;, &#39;time&#39;, &#39;easting&#39;, </span><span class="se">\</span>
+<span class="s">                &#39;northing&#39;, &#39;lat&#39; and &#39;lon&#39; not all present in NetCDF&quot;</span><span class="p">)</span>
+
+    <span class="n">ncg</span> <span class="o">=</span> <span class="n">nc</span><span class="o">.</span><span class="n">groups</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;Initial&#39;</span> <span class="ow">in</span> <span class="n">ncg</span> <span class="ow">and</span> <span class="s">&#39;Precipitation&#39;</span> <span class="ow">in</span> <span class="n">ncg</span> <span class="ow">and</span> <span class="s">&#39;Input&#39;</span> <span class="ow">in</span> <span class="n">ncg</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">valid</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ISNOBALNetcdfError</span><span class="p">(</span><span class="s">&quot;&#39;Initial&#39;, &#39;Precipitation&#39;, and &#39;Input&#39; </span><span class="se">\</span>
+<span class="s">                groups not present in NetCDF&quot;</span><span class="p">)</span>
+
+    <span class="n">gvars</span> <span class="o">=</span> <span class="n">ncg</span><span class="p">[</span><span class="s">&#39;Input&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;I_lw&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span> <span class="s">&#39;T_a&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span> <span class="s">&#39;e_a&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span>
+             <span class="s">&#39;u&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span> <span class="s">&#39;T_g&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span> <span class="s">&#39;S_n&#39;</span> <span class="ow">in</span> <span class="n">gvars</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">valid</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ISNOBALNetcdfError</span><span class="p">(</span><span class="s">&quot;All required variables not present in inputs</span><span class="se">\</span>
+<span class="s">                group of NetCDF&quot;</span><span class="p">)</span>
+
+    <span class="n">gvars</span> <span class="o">=</span> <span class="n">ncg</span><span class="p">[</span><span class="s">&#39;Initial&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;z&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span> <span class="s">&#39;z_0&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span> <span class="s">&#39;z_s&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span>
+             <span class="s">&#39;rho&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span> <span class="s">&#39;T_s_0&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span> <span class="s">&#39;T_s&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span>
+             <span class="s">&#39;h2o_sat&#39;</span> <span class="ow">in</span> <span class="n">gvars</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">valid</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ISNOBALNetcdfError</span><span class="p">(</span><span class="s">&quot;All required variables not present in </span><span class="se">\</span>
+<span class="s">                initialization group of NetCDF&quot;</span><span class="p">)</span>
+
+    <span class="n">gvars</span> <span class="o">=</span> <span class="n">ncg</span><span class="p">[</span><span class="s">&#39;Precipitation&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;m_pp&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span> <span class="s">&#39;percent_snow&#39;</span> <span class="ow">in</span> <span class="n">gvars</span> <span class="ow">and</span>
+             <span class="s">&#39;rho_snow&#39;</span> <span class="ow">in</span> <span class="n">gvars</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">valid</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ISNOBALNetcdfError</span><span class="p">(</span><span class="s">&quot;All precipitation variables are not present </span><span class="se">\</span>
+<span class="s">                in NetCDF&quot;</span><span class="p">)</span>
+
+
+<span class="c">#: ISNOBAL variable names to be looked up to make dataframes and write metadata</span>
+<span class="n">VARNAME_DICT</span> <span class="o">=</span> \
+    <span class="p">{</span>
+        <span class="s">&#39;in&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;I_lw&quot;</span><span class="p">,</span> <span class="s">&quot;T_a&quot;</span><span class="p">,</span> <span class="s">&quot;e_a&quot;</span><span class="p">,</span> <span class="s">&quot;u&quot;</span><span class="p">,</span> <span class="s">&quot;T_g&quot;</span><span class="p">,</span> <span class="s">&quot;S_n&quot;</span><span class="p">],</span>
+        <span class="s">&#39;em&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;R_n&quot;</span><span class="p">,</span> <span class="s">&quot;H&quot;</span><span class="p">,</span> <span class="s">&quot;L_v_E&quot;</span><span class="p">,</span> <span class="s">&quot;G&quot;</span><span class="p">,</span> <span class="s">&quot;M&quot;</span><span class="p">,</span> <span class="s">&quot;delta_Q&quot;</span><span class="p">,</span> <span class="s">&quot;E_s&quot;</span><span class="p">,</span> <span class="s">&quot;melt&quot;</span><span class="p">,</span>
+               <span class="s">&quot;ro_predict&quot;</span><span class="p">,</span> <span class="s">&quot;cc_s&quot;</span><span class="p">],</span>
+        <span class="s">&#39;snow&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;z_s&quot;</span><span class="p">,</span> <span class="s">&quot;rho&quot;</span><span class="p">,</span> <span class="s">&quot;m_s&quot;</span><span class="p">,</span> <span class="s">&quot;h2o&quot;</span><span class="p">,</span> <span class="s">&quot;T_s_0&quot;</span><span class="p">,</span> <span class="s">&quot;T_s_l&quot;</span><span class="p">,</span> <span class="s">&quot;T_s&quot;</span><span class="p">,</span>
+                 <span class="s">&quot;z_s_l&quot;</span><span class="p">,</span> <span class="s">&quot;h2o_sat&quot;</span><span class="p">],</span>
+        <span class="s">&#39;init&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;z&quot;</span><span class="p">,</span> <span class="s">&quot;z_0&quot;</span><span class="p">,</span> <span class="s">&quot;z_s&quot;</span><span class="p">,</span> <span class="s">&quot;rho&quot;</span><span class="p">,</span> <span class="s">&quot;T_s_0&quot;</span><span class="p">,</span> <span class="s">&quot;T_s&quot;</span><span class="p">,</span> <span class="s">&quot;h2o_sat&quot;</span><span class="p">],</span>
+        <span class="s">&#39;precip&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;m_pp&quot;</span><span class="p">,</span> <span class="s">&quot;percent_snow&quot;</span><span class="p">,</span> <span class="s">&quot;rho_snow&quot;</span><span class="p">,</span> <span class="s">&quot;T_pp&quot;</span><span class="p">],</span>
+        <span class="s">&#39;mask&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;mask&quot;</span><span class="p">],</span>
+        <span class="s">&#39;dem&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s">&quot;alt&quot;</span><span class="p">]</span>
+    <span class="p">}</span>
+
+<span class="c">#: Convert number of bytes to struct package code for unsigned integer type</span>
+<span class="n">PACK_DICT</span> <span class="o">=</span> \
+    <span class="p">{</span>
+        <span class="mi">1</span><span class="p">:</span> <span class="s">&#39;B&#39;</span><span class="p">,</span>
+        <span class="mi">2</span><span class="p">:</span> <span class="s">&#39;H&#39;</span><span class="p">,</span>
+        <span class="mi">4</span><span class="p">:</span> <span class="s">&#39;I&#39;</span>
+    <span class="p">}</span>
+
+
+<div class="viewcode-block" id="isnobal"><a class="viewcode-back" href="../../../isnobal.html#wcwave_adaptors.wcwave_adaptors.isnobal.isnobal">[docs]</a><span class="k">def</span> <span class="nf">isnobal</span><span class="p">(</span><span class="n">nc_in</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">nc_out_fname</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">data_tstep</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">nsteps</span><span class="o">=</span><span class="mi">8758</span><span class="p">,</span>
+            <span class="n">init_img</span><span class="o">=</span><span class="s">&quot;data/init.ipw&quot;</span><span class="p">,</span> <span class="n">precip_file</span><span class="o">=</span><span class="s">&quot;data/ppt_desc&quot;</span><span class="p">,</span>
+            <span class="n">mask_file</span><span class="o">=</span><span class="s">&quot;data/tl2p5mask.ipw&quot;</span><span class="p">,</span> <span class="n">input_prefix</span><span class="o">=</span><span class="s">&quot;data/inputs/in&quot;</span><span class="p">,</span>
+            <span class="n">output_frequency</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">em_prefix</span><span class="o">=</span><span class="s">&quot;data/outputs/em&quot;</span><span class="p">,</span>
+            <span class="n">snow_prefix</span><span class="o">=</span><span class="s">&quot;data/outputs/snow&quot;</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="s">&#39;hours&#39;</span><span class="p">,</span> <span class="n">year</span><span class="o">=</span><span class="mi">2010</span><span class="p">,</span>
+            <span class="n">month</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">day</span><span class="o">=</span><span class="s">&#39;01&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Wrapper for running the ISNOBAL</span>
+<span class="sd">        (http://cgiss.boisestate.edu/~hpm/software/IPW/man1/isnobal.html)</span>
+<span class="sd">        model.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            nc_in (netCDF4.Dataset) Input NetCDF4 dataset. See</span>
+<span class="sd">                AssertISNOBALInput for requirements.</span>
+<span class="sd">            nc_out_fname (str) Name of NetCDF file to write to, if desired</span>
+
+<span class="sd">            For explanations the rest, see the link above.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (netCDF4.Dataset) NetCDF Dataset object of the outputs</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">nc_in</span><span class="p">:</span>
+
+        <span class="n">isnobalcmd</span> <span class="o">=</span> <span class="s">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s">&quot;isnobal&quot;</span><span class="p">,</span>
+                               <span class="s">&quot;-t &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">data_tstep</span><span class="p">),</span>
+                               <span class="s">&quot;-n &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">nsteps</span><span class="p">),</span>
+                               <span class="s">&quot;-I &quot;</span> <span class="o">+</span> <span class="n">init_img</span><span class="p">,</span>
+                               <span class="s">&quot;-p &quot;</span> <span class="o">+</span> <span class="n">precip_file</span><span class="p">,</span>
+                               <span class="s">&quot;-m &quot;</span> <span class="o">+</span> <span class="n">mask_file</span><span class="p">,</span>
+                               <span class="s">&quot;-i &quot;</span> <span class="o">+</span> <span class="n">input_prefix</span><span class="p">,</span>
+                               <span class="s">&quot;-O &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">output_frequency</span><span class="p">),</span>
+                               <span class="s">&quot;-e &quot;</span> <span class="o">+</span> <span class="n">em_prefix</span><span class="p">,</span>
+                               <span class="s">&quot;-s &quot;</span> <span class="o">+</span> <span class="n">snow_prefix</span><span class="p">])</span>
+
+        <span class="c"># TODO sanitize this isnobalcmd or better yet, avoid shell=True</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">check_output</span><span class="p">(</span><span class="n">isnobalcmd</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s">&quot;ISNOBAL process output: &quot;</span> <span class="o">+</span> <span class="n">output</span><span class="p">)</span>
+
+        <span class="c"># create a NetCDF of the outputs and return it</span>
+        <span class="n">nc_out</span> <span class="o">=</span> \
+            <span class="n">generate_standard_nc</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="n">em_prefix</span><span class="p">),</span> <span class="n">nc_out_fname</span><span class="p">,</span>
+                                 <span class="n">data_tstep</span><span class="o">=</span><span class="n">data_tstep</span><span class="p">,</span>
+                                 <span class="n">output_frequency</span><span class="o">=</span><span class="n">output_frequency</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span>
+                                 <span class="n">year</span><span class="o">=</span><span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="o">=</span><span class="n">month</span><span class="p">,</span> <span class="n">day</span><span class="o">=</span><span class="n">day</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">nc_out</span>
+
+    <span class="k">else</span><span class="p">:</span>
+
+        <span class="n">AssertISNOBALInput</span><span class="p">(</span><span class="n">nc_in</span><span class="p">)</span>
+
+        <span class="c"># these are guaranteed to be present by the above assertion</span>
+        <span class="n">data_tstep</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">data_tstep</span>
+        <span class="n">nsteps</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">nsteps</span>
+        <span class="n">output_frequency</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">output_frequency</span>
+
+        <span class="c"># create standard IPW data in tmpdir; creates tmpdir</span>
+        <span class="n">tmpdir</span> <span class="o">=</span> <span class="s">&#39;/tmp/isnobalrun&#39;</span> <span class="o">+</span> \
+            <span class="nb">str</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">())</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39; &#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+
+        <span class="n">nc_to_standard_ipw</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="n">tmpdir</span><span class="p">)</span>
+
+        <span class="n">mkdir</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="s">&#39;outputs&#39;</span><span class="p">))</span>
+
+        <span class="c"># nc_to_standard_ipw is well tested, we know these will be present</span>
+        <span class="n">init_img</span> <span class="o">=</span> <span class="n">osjoin</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="s">&#39;init.ipw&#39;</span><span class="p">)</span>
+        <span class="n">precip_file</span> <span class="o">=</span> <span class="n">osjoin</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="s">&#39;ppt_desc&#39;</span><span class="p">)</span>
+        <span class="n">mask_file</span> <span class="o">=</span> <span class="n">osjoin</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="s">&#39;mask.ipw&#39;</span><span class="p">)</span>
+        <span class="n">input_prefix</span> <span class="o">=</span> <span class="n">osjoin</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="s">&#39;inputs/in&#39;</span><span class="p">)</span>
+        <span class="n">em_prefix</span> <span class="o">=</span> <span class="n">osjoin</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="s">&#39;outputs/em&#39;</span><span class="p">)</span>
+        <span class="n">snow_prefix</span> <span class="o">=</span> <span class="n">osjoin</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="s">&#39;outputs/snow&#39;</span><span class="p">)</span>
+
+        <span class="c"># recursively run isnobal with nc_in=None</span>
+        <span class="n">nc_out</span> <span class="o">=</span> <span class="n">isnobal</span><span class="p">(</span><span class="n">data_tstep</span><span class="o">=</span><span class="n">data_tstep</span><span class="p">,</span> <span class="n">nsteps</span><span class="o">=</span><span class="n">nsteps</span><span class="p">,</span>
+                         <span class="n">init_img</span><span class="o">=</span><span class="n">init_img</span><span class="p">,</span> <span class="n">precip_file</span><span class="o">=</span><span class="n">precip_file</span><span class="p">,</span>
+                         <span class="n">mask_file</span><span class="o">=</span><span class="n">mask_file</span><span class="p">,</span> <span class="n">input_prefix</span><span class="o">=</span><span class="n">input_prefix</span><span class="p">,</span>
+                         <span class="n">output_frequency</span><span class="o">=</span><span class="n">output_frequency</span><span class="p">,</span>
+                         <span class="n">em_prefix</span><span class="o">=</span><span class="n">em_prefix</span><span class="p">,</span> <span class="n">snow_prefix</span><span class="o">=</span><span class="n">snow_prefix</span><span class="p">)</span>
+
+        <span class="n">rmtree</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">nc_out</span>
+</div>
+<div class="viewcode-block" id="IPW"><a class="viewcode-back" href="../../../isnobal.html#wcwave_adaptors.wcwave_adaptors.isnobal.IPW">[docs]</a><span class="k">class</span> <span class="nc">IPW</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Represents an IPW file. Provides a data_frame attribute to access the</span>
+<span class="sd">    variables and their floating point representation as a dataframe. The</span>
+<span class="sd">    dataframe can be modified, the headers recalculated with</span>
+<span class="sd">    recalculateHeaders, and then written back to IPW binary with</span>
+<span class="sd">    writeBinary.</span>
+
+<span class="sd">    &gt;&gt;&gt; ipw = IPW(&quot;in.0000&quot;)</span>
+<span class="sd">    &gt;&gt;&gt; ipw.data_frame.T_a = ipw.data_frame.T_a + 1.0 # add 1 dg C to each temp</span>
+<span class="sd">    &gt;&gt;&gt; ipw.writeBinary(&quot;in.plusOne.000&quot;)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_file</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">config_file</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                 <span class="n">water_year</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">file_type</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+
+        <span class="k">assert</span> <span class="n">dt</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="nb">issubclass</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">dt</span><span class="p">),</span> <span class="n">datetime</span><span class="o">.</span><span class="n">timedelta</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">input_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+
+            <span class="n">ipw_lines</span> <span class="o">=</span> <span class="n">IPWLines</span><span class="p">(</span><span class="n">input_file</span><span class="p">)</span>
+            <span class="n">input_split</span> <span class="o">=</span> <span class="n">basename</span><span class="p">(</span><span class="n">input_file</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;.&#39;</span><span class="p">)</span>
+
+            <span class="n">file_type</span> <span class="o">=</span> <span class="n">file_type</span> <span class="ow">or</span> <span class="n">input_split</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+            <span class="c"># _make_bands</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">header_dict</span> <span class="o">=</span> \
+                    <span class="n">_make_bands</span><span class="p">(</span><span class="n">ipw_lines</span><span class="o">.</span><span class="n">header_lines</span><span class="p">,</span>
+                                <span class="n">VARNAME_DICT</span><span class="p">[</span><span class="n">file_type</span><span class="p">])</span>
+
+            <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">IPWFileError</span><span class="p">(</span><span class="s">&quot;Provide explicit file type for file </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span>
+                                   <span class="n">input_file</span><span class="p">)</span>
+
+            <span class="c"># extract just bands from the header dictionary</span>
+            <span class="n">bands</span> <span class="o">=</span> <span class="p">[</span><span class="n">band</span> <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="n">header_dict</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+
+            <span class="c"># get the nonglobal_bands in a list, ordered by band index</span>
+            <span class="n">nonglobal_bands</span> <span class="o">=</span>\
+                <span class="nb">sorted</span><span class="p">([</span><span class="n">band</span> <span class="k">for</span> <span class="n">varname</span><span class="p">,</span> <span class="n">band</span> <span class="ow">in</span> <span class="n">header_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span>
+                        <span class="k">if</span> <span class="n">varname</span> <span class="o">!=</span> <span class="s">&#39;global&#39;</span><span class="p">],</span>
+                       <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">b</span><span class="p">:</span> <span class="n">b</span><span class="o">.</span><span class="n">band_idx</span><span class="p">)</span>
+
+            <span class="c"># the default configuration is used if no config file is given</span>
+            <span class="k">if</span> <span class="n">config_file</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">config_file</span> <span class="o">=</span> \
+                    <span class="n">osjoin</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="n">__file__</span><span class="p">),</span> <span class="s">&#39;../default.conf&#39;</span><span class="p">)</span>
+
+            <span class="c"># helper function _get_config uses ConfigParser to parse config file</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="n">_get_config</span><span class="p">(</span><span class="n">config_file</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">file_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;in&#39;</span><span class="p">,</span> <span class="s">&#39;em&#39;</span><span class="p">,</span> <span class="s">&#39;snow&#39;</span><span class="p">]:</span>
+
+                <span class="c"># set the water year to default if not given</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">water_year</span><span class="p">:</span>
+                    <span class="n">water_year</span> <span class="o">=</span> <span class="mi">2010</span>
+
+                <span class="c"># note that we have not generalized for non-hour timestep data</span>
+                <span class="k">if</span> <span class="n">dt</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="n">dt</span> <span class="o">=</span> <span class="n">Timedelta</span><span class="p">(</span><span class="s">&#39;1 hour&#39;</span><span class="p">)</span>
+
+                <span class="c"># the iSNOBAL file naming scheme puts the integer time step</span>
+                <span class="c"># after the dot, really as the extension</span>
+                <span class="c"># TODO as Roger pointed out, really this is for</span>
+                <span class="c"># a single point in time, so this timing thing is not right</span>
+                <span class="n">start_dt</span> <span class="o">=</span> <span class="n">dt</span> <span class="o">*</span> <span class="nb">int</span><span class="p">(</span><span class="n">input_split</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+                <span class="n">start_datetime</span> <span class="o">=</span> \
+                    <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="n">water_year</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mo">01</span><span class="p">)</span> <span class="o">+</span> <span class="n">start_dt</span>
+
+                <span class="n">end_datetime</span> <span class="o">=</span> <span class="n">start_datetime</span> <span class="o">+</span> <span class="n">dt</span>
+
+            <span class="k">else</span><span class="p">:</span>
+
+                <span class="n">start_datetime</span> <span class="o">=</span> <span class="bp">None</span>
+                <span class="n">end_datetime</span> <span class="o">=</span> <span class="bp">None</span>
+
+            <span class="c"># initialized when called for below</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_data_frame</span> <span class="o">=</span> <span class="bp">None</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">input_file</span> <span class="o">=</span> <span class="n">input_file</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">file_type</span> <span class="o">=</span> <span class="n">file_type</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">header_dict</span> <span class="o">=</span> <span class="n">header_dict</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">binary_data</span> <span class="o">=</span> <span class="n">ipw_lines</span><span class="o">.</span><span class="n">binary_data</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bands</span> <span class="o">=</span> <span class="n">bands</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nonglobal_bands</span> <span class="o">=</span> <span class="n">nonglobal_bands</span>
+
+            <span class="c"># use geo information in band0; all bands have equiv geo info</span>
+            <span class="n">band0</span> <span class="o">=</span> <span class="n">nonglobal_bands</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">geotransform</span> <span class="o">=</span> <span class="p">[</span><span class="n">band0</span><span class="o">.</span><span class="n">bsamp</span> <span class="o">-</span> <span class="n">band0</span><span class="o">.</span><span class="n">dsamp</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span>
+                                 <span class="n">band0</span><span class="o">.</span><span class="n">dsamp</span><span class="p">,</span>
+                                 <span class="mf">0.0</span><span class="p">,</span>
+                                 <span class="n">band0</span><span class="o">.</span><span class="n">bline</span> <span class="o">-</span> <span class="n">band0</span><span class="o">.</span><span class="n">dline</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span>
+                                 <span class="mf">0.0</span><span class="p">,</span>
+                                 <span class="n">band0</span><span class="o">.</span><span class="n">dline</span><span class="p">]</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">config_file</span> <span class="o">=</span> <span class="n">config_file</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">start_datetime</span> <span class="o">=</span> <span class="n">start_datetime</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">end_datetime</span> <span class="o">=</span> <span class="n">end_datetime</span>
+
+        <span class="k">else</span><span class="p">:</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_data_frame</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">input_file</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">file_type</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">header_dict</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">binary_data</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bands</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nonglobal_bands</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">geotransform</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">start_datetime</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">end_datetime</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="k">return</span> <span class="bp">None</span>
+
+<div class="viewcode-block" id="IPW.recalculate_header"><a class="viewcode-back" href="../../../isnobal.html#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.recalculate_header">[docs]</a>    <span class="k">def</span> <span class="nf">recalculate_header</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            Recalculate header values</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_recalculate_header</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nonglobal_bands</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_frame</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nonglobal_bands</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">header_dict</span><span class="p">[</span><span class="n">band</span><span class="o">.</span><span class="n">varname</span><span class="p">]</span> <span class="o">=</span> <span class="n">band</span>
+</div>
+    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="IPW.precip_tuple"><a class="viewcode-back" href="../../../isnobal.html#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.precip_tuple">[docs]</a>    <span class="k">def</span> <span class="nf">precip_tuple</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">precip_file</span><span class="p">,</span> <span class="n">sepchar</span><span class="o">=</span><span class="s">&#39;</span><span class="se">\t</span><span class="s">&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create list of two-lists where each element&#39;s elements are the time</span>
+<span class="sd">           index of the time step when the precipitation happened and an IPW</span>
+<span class="sd">           of the precipitation data.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pptlist</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">l</span><span class="p">:</span> <span class="n">l</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">sepchar</span><span class="p">),</span>
+                      <span class="nb">open</span><span class="p">(</span><span class="n">precip_file</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">readlines</span><span class="p">())</span>
+
+        <span class="k">return</span> <span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">l</span><span class="p">:</span> <span class="p">(</span><span class="n">l</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">IPW</span><span class="p">(</span><span class="n">l</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">file_type</span><span class="o">=</span><span class="s">&#39;precip&#39;</span><span class="p">)),</span> <span class="n">pptlist</span><span class="p">)</span>
+</div>
+    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="IPW.from_nc"><a class="viewcode-back" href="../../../isnobal.html#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.from_nc">[docs]</a>    <span class="k">def</span> <span class="nf">from_nc</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">nc_in</span><span class="p">,</span> <span class="n">tstep</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                <span class="n">distance_units</span><span class="o">=</span><span class="s">&#39;m&#39;</span><span class="p">,</span> <span class="n">coord_sys_ID</span><span class="o">=</span><span class="s">&#39;UTM&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generate an IPW object from a NetCDF file.</span>
+
+<span class="sd">        &gt;&gt;&gt; ipw = IPW.from_nc(&#39;dataset.nc&#39;, tstep=&#39;1&#39;, group=&#39;Inputs&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; ipw = IPW.from_nc(nc_in)</span>
+
+<span class="sd">        If your data uses units of distance other than meters, set that</span>
+<span class="sd">        with kwarg `distance_units`. Simliar</span>
+
+<span class="sd">       Arguments:</span>
+<span class="sd">            nc_in (str or NetCDF4.Dataset) NetCDF to convert to IPW</span>
+<span class="sd">            tstep (int) The time step in whatever units are being used</span>
+<span class="sd">            group (str) Group of NetCDF variable, e.g. &#39;Precipitation&#39;</span>
+<span class="sd">            variable (str or list) One or many variable names to be</span>
+<span class="sd">                incorporated into IPW file</span>
+<span class="sd">            distance_units (str) If you use a measure of distance other</span>
+<span class="sd">                than meters, put the units here</span>
+<span class="sd">            coord_sys_ID (str) Coordinate system being used</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (IPW) IPW instance built from NetCDF inputs</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">nc_in</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span><span class="p">:</span>
+            <span class="n">nc_in</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">)</span>
+        <span class="c"># check and get variables from netcdf</span>
+        <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">and</span> <span class="n">variable</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&quot;group and variable both &#39;None&#39;: no data to convert!&quot;</span><span class="p">)</span>
+
+        <span class="c"># initialize the IPW and set its some global attributes</span>
+        <span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">variable</span> <span class="o">==</span> <span class="s">&#39;alt&#39;</span><span class="p">:</span>
+                <span class="n">ipw</span><span class="o">.</span><span class="n">file_type</span> <span class="o">=</span> <span class="s">&#39;dem&#39;</span>
+            <span class="k">elif</span> <span class="n">variable</span> <span class="o">==</span> <span class="s">&#39;mask&#39;</span><span class="p">:</span>
+                <span class="n">ipw</span><span class="o">.</span><span class="n">file_type</span> <span class="o">=</span> <span class="n">variable</span>
+
+            <span class="c"># this allows same lookup to be used for init or dem/mask</span>
+            <span class="n">nc_vars</span> <span class="o">=</span> <span class="p">{</span><span class="n">variable</span><span class="p">:</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">variables</span><span class="p">[</span><span class="n">variable</span><span class="p">]}</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">nc_vars</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>  <span class="c"># throw if key `group` dne</span>
+
+            <span class="k">if</span> <span class="n">group</span> <span class="o">==</span> <span class="s">&#39;Input&#39;</span><span class="p">:</span>
+                <span class="n">ipw</span><span class="o">.</span><span class="n">file_type</span> <span class="o">=</span> <span class="s">&#39;in&#39;</span>
+            <span class="k">elif</span> <span class="n">group</span> <span class="o">==</span> <span class="s">&#39;Precipitation&#39;</span><span class="p">:</span>
+                <span class="n">ipw</span><span class="o">.</span><span class="n">file_type</span> <span class="o">=</span> <span class="s">&#39;precip&#39;</span>
+            <span class="k">elif</span> <span class="n">group</span> <span class="o">==</span> <span class="s">&#39;Initial&#39;</span><span class="p">:</span>
+                <span class="n">ipw</span><span class="o">.</span><span class="n">file_type</span> <span class="o">=</span> <span class="s">&#39;init&#39;</span>
+
+        <span class="c"># read header info from nc and generate/assign to new IPW</span>
+        <span class="c"># build global dict</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">byteorder</span> <span class="o">=</span> <span class="s">&#39;0123&#39;</span>  <span class="c"># TODO read from file</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">nlines</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">nc_in</span><span class="o">.</span><span class="n">dimensions</span><span class="p">[</span><span class="s">&#39;northing&#39;</span><span class="p">])</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">nsamps</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">nc_in</span><span class="o">.</span><span class="n">dimensions</span><span class="p">[</span><span class="s">&#39;easting&#39;</span><span class="p">])</span>
+
+        <span class="c"># if the bands are not part of a group, they are handled individually</span>
+        <span class="k">if</span> <span class="n">group</span><span class="p">:</span>
+            <span class="n">ipw</span><span class="o">.</span><span class="n">nbands</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">nc_vars</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ipw</span><span class="o">.</span><span class="n">nbands</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="n">globalBand</span> <span class="o">=</span> <span class="n">GlobalBand</span><span class="p">(</span><span class="n">ipw</span><span class="o">.</span><span class="n">byteorder</span><span class="p">,</span> <span class="n">ipw</span><span class="o">.</span><span class="n">nlines</span><span class="p">,</span>
+                                <span class="n">ipw</span><span class="o">.</span><span class="n">nsamps</span><span class="p">,</span> <span class="n">ipw</span><span class="o">.</span><span class="n">nbands</span><span class="p">)</span>
+
+        <span class="c"># build non-global band(s). Can use recalculate_header so no min/max</span>
+        <span class="c"># need be set.</span>
+        <span class="c"># setting all values common to all bands</span>
+        <span class="c"># use 2 bytes/16 bits for floating point values</span>
+        <span class="n">bytes_</span> <span class="o">=</span> <span class="n">NC_NBYTES</span>
+        <span class="n">bits_</span> <span class="o">=</span> <span class="n">NC_NBITS</span>
+
+        <span class="n">bline</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">bline</span>
+        <span class="n">dline</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">dline</span>
+        <span class="n">bsamp</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">bsamp</span>
+        <span class="n">dsamp</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">dsamp</span>
+
+        <span class="n">geo_units</span> <span class="o">=</span> <span class="n">distance_units</span>
+        <span class="n">coord_sys_ID</span> <span class="o">=</span> <span class="n">coord_sys_ID</span>
+
+        <span class="c"># iterate over each item in VARNAME_DICT for the filetype, creating</span>
+        <span class="c"># a &quot;Band&quot; for each and corresponding entry in the poorly named</span>
+        <span class="c"># header_dict</span>
+        <span class="n">varnames</span> <span class="o">=</span> <span class="n">VARNAME_DICT</span><span class="p">[</span><span class="n">ipw</span><span class="o">.</span><span class="n">file_type</span><span class="p">]</span>
+        <span class="n">header_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">varnames</span><span class="p">,</span>
+                               <span class="p">[</span><span class="n">Band</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">varnames</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]))</span>
+
+        <span class="c"># create a dataframe with nrows = nlines*nsamps and variable colnames</span>
+        <span class="n">df_shape</span> <span class="o">=</span> <span class="p">(</span><span class="n">ipw</span><span class="o">.</span><span class="n">nlines</span><span class="o">*</span><span class="n">ipw</span><span class="o">.</span><span class="n">nsamps</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">varnames</span><span class="p">))</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">DataFrame</span><span class="p">(</span><span class="n">zeros</span><span class="p">(</span><span class="n">df_shape</span><span class="p">),</span> <span class="n">columns</span><span class="o">=</span><span class="n">varnames</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">var</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">varnames</span><span class="p">):</span>
+
+            <span class="n">header_dict</span><span class="p">[</span><span class="n">var</span><span class="p">]</span> <span class="o">=</span> <span class="n">Band</span><span class="p">(</span><span class="n">varname</span><span class="o">=</span><span class="n">var</span><span class="p">,</span> <span class="n">band_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">,</span> <span class="n">nBytes</span><span class="o">=</span><span class="n">bytes_</span><span class="p">,</span>
+                <span class="n">nBits</span><span class="o">=</span><span class="n">bits_</span><span class="p">,</span> <span class="n">int_max</span><span class="o">=</span><span class="n">NC_MAXINT</span><span class="p">,</span> <span class="n">bline</span><span class="o">=</span><span class="n">bline</span><span class="p">,</span> <span class="n">dline</span><span class="o">=</span><span class="n">dline</span><span class="p">,</span>
+                <span class="n">bsamp</span><span class="o">=</span><span class="n">bsamp</span><span class="p">,</span> <span class="n">dsamp</span><span class="o">=</span><span class="n">dsamp</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="n">geo_units</span><span class="p">,</span>
+                <span class="n">coord_sys_ID</span><span class="o">=</span><span class="n">coord_sys_ID</span><span class="p">)</span>
+
+            <span class="c"># insert data to each df column</span>
+            <span class="k">if</span> <span class="n">tstep</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">ravel</span><span class="p">(</span><span class="n">nc_vars</span><span class="p">[</span><span class="n">var</span><span class="p">][</span><span class="n">tstep</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">ravel</span><span class="p">(</span><span class="n">nc_vars</span><span class="p">[</span><span class="n">var</span><span class="p">])</span>
+
+            <span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+
+        <span class="n">ipw</span><span class="o">.</span><span class="n">_data_frame</span> <span class="o">=</span> <span class="n">df</span>
+
+        <span class="n">ipw</span><span class="o">.</span><span class="n">nonglobal_bands</span> <span class="o">=</span> <span class="n">header_dict</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+
+        <span class="c"># include global band in header dictionary</span>
+        <span class="n">header_dict</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s">&#39;global&#39;</span><span class="p">:</span> <span class="n">globalBand</span><span class="p">})</span>
+
+        <span class="n">ipw</span><span class="o">.</span><span class="n">geotransform</span> <span class="o">=</span> <span class="p">[</span><span class="n">bsamp</span> <span class="o">-</span> <span class="n">dsamp</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span>
+                            <span class="n">dsamp</span><span class="p">,</span>
+                            <span class="mf">0.0</span><span class="p">,</span>
+                            <span class="n">bline</span> <span class="o">-</span> <span class="n">dline</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span>
+                            <span class="mf">0.0</span><span class="p">,</span>
+                            <span class="n">dline</span><span class="p">]</span>
+
+        <span class="n">ipw</span><span class="o">.</span><span class="n">bands</span> <span class="o">=</span> <span class="n">header_dict</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+
+        <span class="n">ipw</span><span class="o">.</span><span class="n">header_dict</span> <span class="o">=</span> <span class="n">header_dict</span>
+
+        <span class="c"># recalculate headers</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">recalculate_header</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">ipw</span>
+</div>
+<div class="viewcode-block" id="IPW.data_frame"><a class="viewcode-back" href="../../../isnobal.html#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.data_frame">[docs]</a>    <span class="k">def</span> <span class="nf">data_frame</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the Pandas DataFrame representation of the IPW file</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_frame</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_data_frame</span> <span class="o">=</span> \
+                <span class="n">_build_ipw_dataframe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nonglobal_bands</span><span class="p">,</span>
+                                     <span class="bp">self</span><span class="o">.</span><span class="n">binary_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_frame</span>
+</div>
+<div class="viewcode-block" id="IPW.write"><a class="viewcode-back" href="../../../isnobal.html#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fileName</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write the IPW data to file</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">last_line</span> <span class="o">=</span> <span class="s">&quot;!&lt;header&gt; image -1 $Revision: 1.5 $</div></div>
+&quot;</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">fileName</span><span class="p">,</span> <span class="s">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">_bands_to_header_lines</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">header_dict</span><span class="p">):</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">l</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">last_line</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+                <span class="n">_floatdf_to_binstring</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nonglobal_bands</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_frame</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="bp">None</span>
+
+
+<span class="k">def</span> <span class="nf">generate_standard_nc</span><span class="p">(</span><span class="n">base_dir</span><span class="p">,</span> <span class="n">nc_out</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">data_tstep</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+                         <span class="n">output_frequency</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="s">&#39;hours&#39;</span><span class="p">,</span> <span class="n">year</span><span class="o">=</span><span class="mi">2010</span><span class="p">,</span> <span class="n">month</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                         <span class="n">day</span><span class="o">=</span><span class="s">&#39;01&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Use the utilities from netcdf.py to convert standard set of either input</span>
+<span class="sd">       or output files to a NetCDF4 file. A standard set of files means</span>
+
+<span class="sd">        for inputs:</span>
+<span class="sd">            - inputs/ dir with 5/6-band input files named like in.0000, in.0001</span>
+<span class="sd">            - ppt_desc file with time index of precip file and path to ppt file</span>
+<span class="sd">            - ppt_images_dist directory with the 4-band files from ppt_desc</span>
+<span class="sd">            - tl2p5mask.ipw and tl2p5_dem.ipw for mask and DEM images</span>
+<span class="sd">            - init.ipw 7-band initialization file</span>
+
+<span class="sd">        for outputs:</span>
+<span class="sd">            - an output/ directory with 9-band energy-mass (em) outputs and</span>
+<span class="sd">              snow outputs in time steps named like em.0000 and snow.0000</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            base_dir (str): base directory of the data</span>
+<span class="sd">            nc_out (str): path to write data to</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (netCDF4.Dataset) Representation of the data</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s">&#39;outputs&#39;</span> <span class="ow">in</span> <span class="n">base_dir</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+        <span class="n">ipw_type</span> <span class="o">=</span> <span class="s">&#39;outputs&#39;</span>
+
+    <span class="k">elif</span> <span class="s">&#39;inputs&#39;</span> <span class="ow">in</span> <span class="n">listdir</span><span class="p">(</span><span class="n">base_dir</span><span class="p">):</span>
+        <span class="n">ipw_type</span> <span class="o">=</span> <span class="s">&#39;inputs&#39;</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">IPWFileError</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%s</span><span class="s"> does not meet standards&quot;</span> <span class="o">%</span> <span class="n">base_dir</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">ipw_type</span> <span class="o">==</span> <span class="s">&#39;inputs&#39;</span><span class="p">:</span>
+        <span class="n">input_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">osjoin</span><span class="p">(</span><span class="n">base_dir</span><span class="p">,</span> <span class="s">&#39;inputs&#39;</span><span class="p">,</span> <span class="n">el</span><span class="p">)</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span>
+                       <span class="n">listdir</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">base_dir</span><span class="p">,</span> <span class="s">&#39;inputs&#39;</span><span class="p">))]</span>
+
+        <span class="n">ipw0</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">(</span><span class="n">input_files</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="n">ipw0</span><span class="o">.</span><span class="n">geotransform</span>
+        <span class="n">gb</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">ipw0</span><span class="o">.</span><span class="n">bands</span> <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="ow">is</span> <span class="n">GlobalBand</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c"># in iSNOBAL speak, literally the number of steps, not number of</span>
+        <span class="c"># time index entries</span>
+        <span class="n">nsteps</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">input_files</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+        <span class="n">template_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">bline</span><span class="o">=</span><span class="n">gt</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">bsamp</span><span class="o">=</span><span class="n">gt</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dline</span><span class="o">=</span><span class="n">gt</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
+                             <span class="n">dsamp</span><span class="o">=</span><span class="n">gt</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">nsamps</span><span class="o">=</span><span class="n">gb</span><span class="o">.</span><span class="n">nSamps</span><span class="p">,</span> <span class="n">nlines</span><span class="o">=</span><span class="n">gb</span><span class="o">.</span><span class="n">nLines</span><span class="p">,</span>
+                             <span class="n">data_tstep</span><span class="o">=</span><span class="n">data_tstep</span><span class="p">,</span> <span class="n">nsteps</span><span class="o">=</span><span class="n">nsteps</span><span class="p">,</span>
+                             <span class="n">output_frequency</span><span class="o">=</span><span class="n">output_frequency</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span>
+                             <span class="n">year</span><span class="o">=</span><span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="o">=</span><span class="n">month</span><span class="p">,</span> <span class="n">day</span><span class="o">=</span><span class="n">day</span><span class="p">)</span>
+
+        <span class="c"># initialize the nc file</span>
+        <span class="n">nc</span> <span class="o">=</span> <span class="n">ncgen_from_template</span><span class="p">(</span><span class="s">&#39;ipw_in_template.cdl&#39;</span><span class="p">,</span> <span class="n">nc_out</span><span class="p">,</span> <span class="n">clobber</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                                 <span class="o">**</span><span class="n">template_args</span><span class="p">)</span>
+
+        <span class="c"># first take care of non-precip files</span>
+        <span class="k">print</span> <span class="s">&quot;Inserting &#39;Input&#39; data&quot;</span>
+        <span class="k">with</span> <span class="n">ProgressBar</span><span class="p">(</span><span class="n">maxval</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">input_files</span><span class="p">))</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">input_files</span><span class="p">):</span>
+                <span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+                <span class="n">tstep</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">basename</span><span class="p">(</span><span class="n">ipw</span><span class="o">.</span><span class="n">input_file</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">_nc_insert_ipw</span><span class="p">(</span><span class="n">nc</span><span class="p">,</span> <span class="n">ipw</span><span class="p">,</span> <span class="n">tstep</span><span class="p">,</span> <span class="n">gb</span><span class="o">.</span><span class="n">nLines</span><span class="p">,</span> <span class="n">gb</span><span class="o">.</span><span class="n">nSamps</span><span class="p">)</span>
+
+                <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+
+        <span class="n">dem</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">base_dir</span><span class="p">,</span> <span class="s">&#39;tl2p5_dem.ipw&#39;</span><span class="p">),</span> <span class="n">file_type</span><span class="o">=</span><span class="s">&#39;dem&#39;</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">base_dir</span><span class="p">,</span> <span class="s">&#39;tl2p5mask.ipw&#39;</span><span class="p">),</span> <span class="n">file_type</span><span class="o">=</span><span class="s">&#39;mask&#39;</span><span class="p">)</span>
+        <span class="n">init</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">base_dir</span><span class="p">,</span> <span class="s">&#39;init.ipw&#39;</span><span class="p">))</span>
+
+        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="p">[</span><span class="n">mask</span><span class="p">,</span> <span class="n">dem</span><span class="p">,</span> <span class="n">init</span><span class="p">]:</span>
+            <span class="n">_nc_insert_ipw</span><span class="p">(</span><span class="n">nc</span><span class="p">,</span> <span class="n">el</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="n">gb</span><span class="o">.</span><span class="n">nLines</span><span class="p">,</span> <span class="n">gb</span><span class="o">.</span><span class="n">nSamps</span><span class="p">)</span>
+
+        <span class="c"># read ppt_desc file and insert to nc with appropriate time step</span>
+        <span class="n">ppt_pairs</span> <span class="o">=</span> <span class="p">[</span><span class="n">ppt_line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\t</span><span class="s">&#39;</span><span class="p">)</span>
+                     <span class="k">for</span> <span class="n">ppt_line</span> <span class="ow">in</span>
+                     <span class="nb">open</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">base_dir</span><span class="p">,</span> <span class="s">&#39;ppt_desc&#39;</span><span class="p">),</span> <span class="s">&#39;r&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">readlines</span><span class="p">()]</span>
+
+        <span class="k">print</span> <span class="s">&quot;Inserting Precip Data&quot;</span>
+        <span class="k">with</span> <span class="n">ProgressBar</span><span class="p">(</span><span class="n">maxval</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">ppt_pairs</span><span class="p">))</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">ppt_pair</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ppt_pairs</span><span class="p">):</span>
+                <span class="n">tstep</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ppt_pair</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">el</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">(</span><span class="n">ppt_pair</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">file_type</span><span class="o">=</span><span class="s">&#39;precip&#39;</span><span class="p">)</span>
+
+                <span class="n">_nc_insert_ipw</span><span class="p">(</span><span class="n">nc</span><span class="p">,</span> <span class="n">el</span><span class="p">,</span> <span class="n">tstep</span><span class="p">,</span> <span class="n">gb</span><span class="o">.</span><span class="n">nLines</span><span class="p">,</span> <span class="n">gb</span><span class="o">.</span><span class="n">nSamps</span><span class="p">)</span>
+
+                <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="k">print</span> <span class="n">nc</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s">&#39;Input&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>
+
+    <span class="k">else</span><span class="p">:</span>
+
+        <span class="n">output_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">osjoin</span><span class="p">(</span><span class="n">base_dir</span><span class="p">,</span> <span class="n">el</span><span class="p">)</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">listdir</span><span class="p">(</span><span class="n">base_dir</span><span class="p">)]</span>
+        <span class="k">print</span> <span class="n">base_dir</span>
+        <span class="n">ipw0</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">(</span><span class="n">output_files</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">gt</span> <span class="o">=</span> <span class="n">ipw0</span><span class="o">.</span><span class="n">geotransform</span>
+        <span class="n">gb</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">ipw0</span><span class="o">.</span><span class="n">bands</span> <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="ow">is</span> <span class="n">GlobalBand</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">nsteps</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">output_files</span><span class="p">)</span>
+
+        <span class="n">template_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">bline</span><span class="o">=</span><span class="n">gt</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">bsamp</span><span class="o">=</span><span class="n">gt</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dline</span><span class="o">=</span><span class="n">gt</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
+                             <span class="n">dsamp</span><span class="o">=</span><span class="n">gt</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">nsamps</span><span class="o">=</span><span class="n">gb</span><span class="o">.</span><span class="n">nSamps</span><span class="p">,</span> <span class="n">nlines</span><span class="o">=</span><span class="n">gb</span><span class="o">.</span><span class="n">nLines</span><span class="p">,</span>
+                             <span class="n">data_tstep</span><span class="o">=</span><span class="n">data_tstep</span><span class="p">,</span> <span class="n">nsteps</span><span class="o">=</span><span class="n">nsteps</span><span class="p">,</span>
+                             <span class="n">output_frequency</span><span class="o">=</span><span class="n">output_frequency</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span>
+                             <span class="n">year</span><span class="o">=</span><span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="o">=</span><span class="n">month</span><span class="p">,</span> <span class="n">day</span><span class="o">=</span><span class="n">day</span><span class="p">)</span>
+
+        <span class="c"># initialize nc file</span>
+        <span class="n">nc</span> <span class="o">=</span> <span class="n">ncgen_from_template</span><span class="p">(</span><span class="s">&#39;ipw_out_template.cdl&#39;</span><span class="p">,</span> <span class="n">nc_out</span><span class="p">,</span> <span class="n">clobber</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                                 <span class="o">**</span><span class="n">template_args</span><span class="p">)</span>
+
+        <span class="k">print</span> <span class="s">&quot;Inserting Output Data&quot;</span>
+        <span class="k">with</span> <span class="n">ProgressBar</span><span class="p">(</span><span class="n">maxval</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">output_files</span><span class="p">))</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">output_files</span><span class="p">):</span>
+                <span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+                <span class="n">tstep</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">basename</span><span class="p">(</span><span class="n">ipw</span><span class="o">.</span><span class="n">input_file</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">_nc_insert_ipw</span><span class="p">(</span><span class="n">nc</span><span class="p">,</span> <span class="n">ipw</span><span class="p">,</span> <span class="n">tstep</span><span class="p">,</span> <span class="n">gb</span><span class="o">.</span><span class="n">nLines</span><span class="p">,</span> <span class="n">gb</span><span class="o">.</span><span class="n">nSamps</span><span class="p">)</span>
+
+                <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+
+    <span class="n">nc</span><span class="o">.</span><span class="n">sync</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">nc</span>
+
+
+<span class="k">def</span> <span class="nf">_nc_insert_ipw</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">ipw</span><span class="p">,</span> <span class="n">tstep</span><span class="p">,</span> <span class="n">nlines</span><span class="p">,</span> <span class="n">nsamps</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Put IPW data into dataset based on file naming conventions</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dataset (NetCDF4.Dataset): Dataset to be populated</span>
+<span class="sd">            ipw (wcwave_adaptors.isnobal.IPW): source data in IPW format</span>
+<span class="sd">            tstep (int): Positive integer indicating the current time step</span>
+<span class="sd">            nlines (int): number of &#39;lines&#39; in IPW file, aka n_northings</span>
+<span class="sd">            nsamps (int): number of &#39;samps&#39; in IPW file, aka n_eastings</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None. `dataset` is populated in-place.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">file_type</span> <span class="o">=</span> <span class="n">ipw</span><span class="o">.</span><span class="n">file_type</span>
+
+    <span class="n">df</span> <span class="o">=</span> <span class="n">ipw</span><span class="o">.</span><span class="n">data_frame</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">file_type</span> <span class="o">==</span> <span class="s">&#39;dem&#39;</span><span class="p">:</span>
+        <span class="c"># dem only has &#39;alt&#39; information, stored in root group</span>
+        <span class="n">dataset</span><span class="o">.</span><span class="n">variables</span><span class="p">[</span><span class="s">&#39;alt&#39;</span><span class="p">][:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">reshape</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s">&#39;alt&#39;</span><span class="p">],</span>
+                                                    <span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="n">nsamps</span><span class="p">))</span>
+
+    <span class="k">elif</span> <span class="n">file_type</span> <span class="o">==</span> <span class="s">&#39;in&#39;</span><span class="p">:</span>
+        <span class="n">gvars</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s">&#39;Input&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>
+        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">gvars</span><span class="p">:</span>
+            <span class="c"># can&#39;t just assign b/c if sun is &#39;down&#39; var is absent from df</span>
+            <span class="k">if</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                <span class="n">gvars</span><span class="p">[</span><span class="n">var</span><span class="p">][</span><span class="n">tstep</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">reshape</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">],</span>
+                                                     <span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="n">nsamps</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">gvars</span><span class="p">[</span><span class="n">var</span><span class="p">][</span><span class="n">tstep</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="n">nlines</span><span class="p">,</span> <span class="n">nsamps</span><span class="p">))</span>
+
+    <span class="k">elif</span> <span class="n">file_type</span> <span class="o">==</span> <span class="s">&#39;precip&#39;</span><span class="p">:</span>
+        <span class="n">gvars</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s">&#39;Precipitation&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>
+
+        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">gvars</span><span class="p">:</span>
+            <span class="n">gvars</span><span class="p">[</span><span class="n">var</span><span class="p">][</span><span class="n">tstep</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">reshape</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">],</span> <span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="n">nsamps</span><span class="p">))</span>
+
+    <span class="k">elif</span> <span class="n">file_type</span> <span class="o">==</span> <span class="s">&#39;mask&#39;</span><span class="p">:</span>
+        <span class="c"># mask is binary and one-banded; store in root group</span>
+        <span class="n">dataset</span><span class="o">.</span><span class="n">variables</span><span class="p">[</span><span class="s">&#39;mask&#39;</span><span class="p">][:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">reshape</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s">&#39;mask&#39;</span><span class="p">],</span>
+                                                     <span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="n">nsamps</span><span class="p">))</span>
+
+    <span class="k">elif</span> <span class="n">file_type</span> <span class="o">==</span> <span class="s">&#39;init&#39;</span><span class="p">:</span>
+        <span class="n">gvars</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s">&#39;Initial&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>
+
+        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">gvars</span><span class="p">:</span>
+            <span class="n">gvars</span><span class="p">[</span><span class="n">var</span><span class="p">][:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">reshape</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">],</span> <span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="n">nsamps</span><span class="p">))</span>
+
+    <span class="k">elif</span> <span class="n">file_type</span> <span class="o">==</span> <span class="s">&#39;em&#39;</span><span class="p">:</span>
+        <span class="n">gvars</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s">&#39;em&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>
+
+        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">gvars</span><span class="p">:</span>
+            <span class="n">gvars</span><span class="p">[</span><span class="n">var</span><span class="p">][</span><span class="n">tstep</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">reshape</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">],</span> <span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="n">nsamps</span><span class="p">))</span>
+
+    <span class="k">elif</span> <span class="n">file_type</span> <span class="o">==</span> <span class="s">&#39;snow&#39;</span><span class="p">:</span>
+        <span class="n">gvars</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s">&#39;snow&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span>
+
+        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">gvars</span><span class="p">:</span>
+            <span class="n">gvars</span><span class="p">[</span><span class="n">var</span><span class="p">][</span><span class="n">tstep</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">reshape</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">],</span> <span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="n">nsamps</span><span class="p">))</span>
+
+    <span class="c"># TODO file_type == &quot;em&quot; and &quot;snow&quot; for outputs</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;File type </span><span class="si">%s</span><span class="s"> not recognized!&#39;</span> <span class="o">%</span> <span class="n">file_type</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">nc_to_standard_ipw</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="n">ipw_base_dir</span><span class="p">,</span> <span class="n">clobber</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Convert an iSNOBAL NetCDF file to an iSNOBAL standard directory structure</span>
+<span class="sd">       in IPW format. This means that for</span>
+
+<span class="sd">        input nc: all inputs are all in {ipw_base_dir}/inputs and all precip</span>
+<span class="sd">            files are in {ipw_base_dir}/ppt_images_dist. There is a precip</span>
+<span class="sd">            description file {ipw_base_dir}/ppt_desc describing what time index</span>
+<span class="sd">            each precipitation file corresponsds to and the path to the precip</span>
+<span class="sd">            file in ppt_images_dist. There are three more files, the mask, init,</span>
+<span class="sd">            and DEM files at {ipw_base_dir}/ tl2p5mask.ipw, tl2p5_dem.ipw, and</span>
+<span class="sd">            init.ipw</span>
+
+<span class="sd">        output nc: files get output to {ipw_base_dir}/outputs to allow for</span>
+<span class="sd">            building a directory of both inputs and outputs. Files are like</span>
+<span class="sd">            em.0000 and snow.0000 for energy-mass and snow outputs, respectively.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            nc_in (str) path to input NetCDF file to break out</span>
+<span class="sd">            ipw_base_dir</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">nc_in</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">nc_in</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="n">Dataset</span><span class="p">)</span>
+
+    <span class="n">nc_groups</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="k">if</span> <span class="s">&#39;Input&#39;</span> <span class="ow">in</span> <span class="n">nc_groups</span><span class="p">:</span>
+        <span class="n">type_</span> <span class="o">=</span> <span class="s">&#39;inputs&#39;</span>
+    <span class="k">elif</span> <span class="s">&#39;Output&#39;</span> <span class="ow">in</span> <span class="n">nc_groups</span><span class="p">:</span>
+        <span class="n">type_</span> <span class="o">=</span> <span class="s">&#39;outputs&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">IPWFileError</span><span class="p">(</span><span class="s">&quot;NetCDF </span><span class="si">%s</span><span class="s"> is not a valid iSNOBAL representation&quot;</span>
+                           <span class="o">%</span> <span class="n">nc_in</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">nc_in</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">==</span> \
+        <span class="nb">set</span><span class="p">([</span><span class="s">u&#39;Initial&#39;</span><span class="p">,</span> <span class="s">u&#39;Precipitation&#39;</span><span class="p">,</span> <span class="s">u&#39;Input&#39;</span><span class="p">]),</span> \
+        <span class="s">&quot;</span><span class="si">%s</span><span class="s"> not a valid input iSNOBAL NetCDF&quot;</span> <span class="o">%</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">filepath</span><span class="p">()</span>
+
+    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">nc_in</span><span class="o">.</span><span class="n">variables</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">==</span> \
+        <span class="nb">set</span><span class="p">([</span><span class="s">u&#39;time&#39;</span><span class="p">,</span> <span class="s">u&#39;easting&#39;</span><span class="p">,</span> <span class="s">u&#39;northing&#39;</span><span class="p">,</span> <span class="s">u&#39;lat&#39;</span><span class="p">,</span> <span class="s">u&#39;lon&#39;</span><span class="p">,</span>
+             <span class="s">u&#39;alt&#39;</span><span class="p">,</span> <span class="s">u&#39;mask&#39;</span><span class="p">]),</span> \
+        <span class="s">&quot;</span><span class="si">%s</span><span class="s"> not a valid input iSNOBAL NetCDF&quot;</span> <span class="o">%</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">filepath</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">clobber</span> <span class="ow">and</span> <span class="n">exists</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">):</span>
+        <span class="n">rmtree</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">exists</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">IPWFileError</span><span class="p">(</span><span class="s">&quot;clobber=False and </span><span class="si">%s</span><span class="s"> exists&quot;</span> <span class="o">%</span> <span class="n">ipw_base_dir</span><span class="p">)</span>
+    <span class="n">mkdir</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">)</span>
+
+    <span class="n">time_index</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">nc_in</span><span class="o">.</span><span class="n">variables</span><span class="p">[</span><span class="s">&#39;time&#39;</span><span class="p">]))</span>
+
+    <span class="k">if</span> <span class="n">type_</span> <span class="o">==</span> <span class="s">&#39;inputs&#39;</span><span class="p">:</span>
+
+        <span class="c"># for each time step create an IPW file</span>
+        <span class="n">group</span> <span class="o">=</span> <span class="s">&#39;Input&#39;</span>
+        <span class="n">inputs_dir</span> <span class="o">=</span> <span class="n">osjoin</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">,</span> <span class="s">&#39;inputs&#39;</span><span class="p">)</span>
+        <span class="n">mkdir</span><span class="p">(</span><span class="n">inputs_dir</span><span class="p">)</span>
+
+        <span class="n">tsteps</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">time_index</span><span class="p">)</span>
+
+        <span class="n">zeropad_factor</span> <span class="o">=</span> <span class="n">floor</span><span class="p">(</span><span class="n">log10</span><span class="p">(</span><span class="n">tsteps</span><span class="p">))</span>
+
+        <span class="k">print</span> <span class="s">&quot;Writing &#39;Input&#39; Data to IPW files&quot;</span>
+        <span class="k">with</span> <span class="n">ProgressBar</span><span class="p">(</span><span class="n">maxval</span><span class="o">=</span><span class="n">time_index</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">time_index</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">:</span>
+                    <span class="n">idxstr</span> <span class="o">=</span> <span class="s">&quot;0&quot;</span><span class="o">*</span><span class="n">zeropad_factor</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="p">:</span>
+                    <span class="n">idxstr</span> <span class="o">=</span> <span class="s">&quot;0&quot;</span><span class="o">*</span><span class="p">(</span><span class="n">zeropad_factor</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">:</span>
+                    <span class="n">idxstr</span> <span class="o">=</span> <span class="s">&quot;0&quot;</span><span class="o">*</span><span class="p">(</span><span class="n">zeropad_factor</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">idxstr</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+
+                <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="n">tstep</span><span class="o">=</span><span class="n">idx</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span>
+                            <span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">inputs_dir</span><span class="p">,</span> <span class="s">&#39;in.&#39;</span> <span class="o">+</span> <span class="n">idxstr</span><span class="p">))</span>
+
+                <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+
+        <span class="n">group</span> <span class="o">=</span> <span class="s">&#39;Initial&#39;</span>
+        <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">,</span> <span class="s">&#39;init.ipw&#39;</span><span class="p">))</span>
+
+        <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s">&#39;alt&#39;</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">,</span> <span class="s">&#39;dem.ipw&#39;</span><span class="p">))</span>
+
+        <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s">&#39;mask&#39;</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">,</span> <span class="s">&#39;mask.ipw&#39;</span><span class="p">))</span>
+
+        <span class="c"># precip is weird. for no precip tsteps, no IPW exists</span>
+        <span class="c"># list of tsteps that had precip and associated</span>
+        <span class="c"># files stored in ppt_desc</span>
+        <span class="n">group</span> <span class="o">=</span> <span class="s">&#39;Precipitation&#39;</span>
+        <span class="n">ppt_images_dir</span> <span class="o">=</span> <span class="n">osjoin</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">,</span> <span class="s">&#39;ppt_images_dist&#39;</span><span class="p">)</span>
+        <span class="n">mkdir</span><span class="p">(</span><span class="n">ppt_images_dir</span><span class="p">)</span>
+
+        <span class="c"># can use just one variable (precip mass) to see which</span>
+        <span class="n">mpp</span> <span class="o">=</span> <span class="n">nc_in</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">variables</span><span class="p">[</span><span class="s">&#39;m_pp&#39;</span><span class="p">]</span>
+
+        <span class="c"># if no precip at a tstep, variable type is numpy.ma.core.MaskedArray</span>
+        <span class="n">time_indexes</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">el</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">mpp</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">el</span><span class="p">,</span> <span class="n">MaskedArray</span><span class="p">)]</span>
+
+        <span class="c"># this should be mostly right except for ppt_desc and ppt data dir</span>
+        <span class="k">print</span> <span class="s">&quot;Writing &#39;Precipitation&#39; Data to IPW files&quot;</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">ipw_base_dir</span><span class="p">,</span> <span class="s">&#39;ppt_desc&#39;</span><span class="p">),</span> <span class="s">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">ppt_desc</span><span class="p">:</span>
+
+            <span class="k">with</span> <span class="n">ProgressBar</span><span class="p">(</span><span class="n">maxval</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">time_indexes</span><span class="p">))</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
+
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">time_indexes</span><span class="p">):</span>
+                    <span class="n">ppt_desc</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%s</span><span class="se">\t</span><span class="si">%s</span><span class="se">\n</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">idx</span><span class="p">,</span>
+                                   <span class="n">osjoin</span><span class="p">(</span><span class="n">ppt_images_dir</span><span class="p">,</span>
+                                          <span class="s">&#39;ppt_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span> <span class="o">+</span> <span class="s">&#39;.ipw&#39;</span><span class="p">)))</span>
+
+                    <span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="n">nc_in</span><span class="p">,</span> <span class="n">tstep</span><span class="o">=</span><span class="n">idx</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+
+                    <span class="n">ipw</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">osjoin</span><span class="p">(</span><span class="n">ppt_images_dir</span><span class="p">,</span>
+                                     <span class="s">&#39;ppt_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span> <span class="o">+</span> <span class="s">&#39;.ipw&#39;</span><span class="p">))</span>
+
+                    <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&quot;NetCDF to IPW converter not implemented for type </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span>
+                        <span class="n">type_</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">metadata_from_ipw</span><span class="p">(</span><span class="n">ipw</span><span class="p">,</span> <span class="n">output_file</span><span class="p">,</span> <span class="n">parent_model_run_uuid</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="p">,</span>
+                      <span class="n">description</span><span class="p">,</span> <span class="n">model_set</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create the metadata for the IPW object, even if it doesn&#39;t existed as</span>
+<span class="sd">    a file on disk.</span>
+
+<span class="sd">    WARNING: Does not check that output_file exists. Should be used when, e.g.,</span>
+<span class="sd">    a re-sampled IPW file or geotiff is being created and saved, and the</span>
+<span class="sd">    metadata also needs to be created and either saved or sent to the</span>
+<span class="sd">    waterhsed.</span>
+
+<span class="sd">    Returns: None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">fgdc_metadata</span> <span class="o">=</span> <span class="n">make_fgdc_metadata</span><span class="p">(</span><span class="n">output_file</span><span class="p">,</span>
+                                     <span class="n">ipw</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="p">)</span>
+
+    <span class="n">input_prefix</span> <span class="o">=</span> <span class="n">output_file</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;.&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">model_set</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">model_set</span> <span class="o">=</span> <span class="p">(</span><span class="s">&quot;outputs&quot;</span><span class="p">,</span> <span class="s">&quot;inputs&quot;</span><span class="p">)[</span><span class="n">input_prefix</span> <span class="o">==</span> <span class="s">&quot;in&quot;</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">make_watershed_metadata</span><span class="p">(</span><span class="n">output_file</span><span class="p">,</span>
+                                 <span class="n">ipw</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
+                                 <span class="n">parent_model_run_uuid</span><span class="p">,</span>
+                                 <span class="n">model_run_uuid</span><span class="p">,</span>
+                                 <span class="n">model_set</span><span class="p">,</span>
+                                 <span class="n">description</span><span class="p">,</span>
+                                 <span class="n">ipw</span><span class="o">.</span><span class="n">model_vars</span><span class="p">,</span>
+                                 <span class="n">fgdc_metadata</span><span class="p">,</span>
+                                 <span class="n">ipw</span><span class="o">.</span><span class="n">start_datetime</span><span class="p">,</span>
+                                 <span class="n">ipw</span><span class="o">.</span><span class="n">end_datetime</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="reaggregate_ipws"><a class="viewcode-back" href="../../../isnobal.html#wcwave_adaptors.wcwave_adaptors.isnobal.reaggregate_ipws">[docs]</a><span class="k">def</span> <span class="nf">reaggregate_ipws</span><span class="p">(</span><span class="n">ipws</span><span class="p">,</span> <span class="n">fun</span><span class="o">=</span><span class="n">npsum</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s">&#39;H&#39;</span><span class="p">,</span> <span class="n">rule</span><span class="o">=</span><span class="s">&#39;D&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Resample IPWs using the function fun, but only sum is supported.</span>
+<span class="sd">    `freq` corresponds to the actual frequency of the ipws; rule corresponds to</span>
+<span class="sd">    one of the resampling &#39;rules&#39; given here:</span>
+<span class="sd">    http://pandas.pydata.org/pandas-docs/dev/timeseries.html#time-date-components</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">fun</span> <span class="ow">is</span> <span class="n">npsum</span><span class="p">,</span> <span class="s">&quot;Cannot use &quot;</span> <span class="o">+</span> <span class="n">fun</span><span class="o">.</span><span class="n">func_name</span> <span class="o">+</span> \
+        <span class="s">&quot;, only sum has been implemented&quot;</span>
+
+    <span class="k">assert</span> <span class="n">_is_consecutive</span><span class="p">(</span><span class="n">ipws</span><span class="p">)</span>
+
+    <span class="n">ipw0</span> <span class="o">=</span> <span class="n">ipws</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">start_datetime</span> <span class="o">=</span> <span class="n">ipw0</span><span class="o">.</span><span class="n">start_datetime</span>
+
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">date_range</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="n">start_datetime</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">ipws</span><span class="p">),</span> <span class="n">freq</span><span class="o">=</span><span class="n">freq</span><span class="p">)</span>
+
+    <span class="n">series</span> <span class="o">=</span> <span class="n">Series</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">ipw</span><span class="p">:</span> <span class="n">ipw</span><span class="o">.</span><span class="n">data_frame</span><span class="p">(),</span> <span class="n">ipws</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
+
+    <span class="n">resampled</span> <span class="o">=</span> <span class="n">series</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">rule</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="n">npsum</span><span class="p">)</span>
+    <span class="n">resampled_idx</span> <span class="o">=</span> <span class="n">resampled</span><span class="o">.</span><span class="n">index</span>
+
+    <span class="n">resampled_dt</span> <span class="o">=</span> <span class="n">resampled_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">resampled_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">resampled_ipws</span> <span class="o">=</span> <span class="p">[</span><span class="n">IPW</span><span class="p">()</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">resampled</span><span class="p">]</span>
+
+    <span class="n">header_dict</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">ipw0</span><span class="o">.</span><span class="n">header_dict</span><span class="p">)</span>
+    <span class="n">file_type</span> <span class="o">=</span> <span class="n">ipw0</span><span class="o">.</span><span class="n">file_type</span>
+    <span class="c"># bands = deepcopy(ipw0.bands)</span>
+    <span class="n">bands</span> <span class="o">=</span> <span class="n">ipw0</span><span class="o">.</span><span class="n">bands</span>
+    <span class="c"># nonglobal_bands = deepcopy(ipw0.nonglobal_bands)</span>
+    <span class="n">nonglobal_bands</span> <span class="o">=</span> <span class="n">ipw0</span><span class="o">.</span><span class="n">nonglobal_bands</span>
+    <span class="n">geotransform</span> <span class="o">=</span> <span class="n">ipw0</span><span class="o">.</span><span class="n">geotransform</span>
+    <span class="k">for</span> <span class="n">ipw_idx</span><span class="p">,</span> <span class="n">ipw</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">resampled_ipws</span><span class="p">):</span>
+
+        <span class="n">ipw</span><span class="o">.</span><span class="n">_data_frame</span> <span class="o">=</span> <span class="n">resampled</span><span class="p">[</span><span class="n">ipw_idx</span><span class="p">]</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">start_datetime</span> <span class="o">=</span> <span class="n">resampled_idx</span><span class="p">[</span><span class="n">ipw_idx</span><span class="p">]</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">end_datetime</span> <span class="o">=</span> <span class="n">resampled_idx</span><span class="p">[</span><span class="n">ipw_idx</span><span class="p">]</span> <span class="o">+</span> <span class="n">resampled_dt</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">header_dict</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">header_dict</span><span class="p">)</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">file_type</span> <span class="o">=</span> <span class="n">file_type</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">bands</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">bands</span><span class="p">)</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">nonglobal_bands</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">nonglobal_bands</span><span class="p">)</span>
+        <span class="n">ipw</span><span class="o">.</span><span class="n">geotransform</span> <span class="o">=</span> <span class="n">geotransform</span>
+
+        <span class="n">ipw</span><span class="o">.</span><span class="n">recalculate_header</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">resampled_ipws</span>
+
+</div>
+<span class="k">def</span> <span class="nf">_is_consecutive</span><span class="p">(</span><span class="n">ipws</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check that a list of ipws is consecutive</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="bp">True</span>
+    <span class="n">ipw_prev</span> <span class="o">=</span> <span class="n">ipws</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">ipw</span> <span class="ow">in</span> <span class="n">ipws</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+        <span class="n">ret</span> <span class="o">&amp;=</span> <span class="n">ipw_prev</span><span class="o">.</span><span class="n">end_datetime</span> <span class="o">==</span> <span class="n">ipw</span><span class="o">.</span><span class="n">start_datetime</span>
+        <span class="n">ipw_prev</span> <span class="o">=</span> <span class="n">ipw</span>
+
+    <span class="k">return</span> <span class="n">ret</span>
+
+
+<span class="k">def</span> <span class="nf">_build_ipw_dataframe</span><span class="p">(</span><span class="n">nonglobal_bands</span><span class="p">,</span> <span class="n">binary_data</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Build a pandas DataFrame using header info to assign column names</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">colnames</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">nonglobal_bands</span><span class="p">]</span>
+
+    <span class="n">dtype</span> <span class="o">=</span> <span class="n">_bands_to_dtype</span><span class="p">(</span><span class="n">nonglobal_bands</span><span class="p">)</span>
+
+    <span class="n">intData</span> <span class="o">=</span> <span class="n">fromstring</span><span class="p">(</span><span class="n">binary_data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+
+    <span class="n">df</span> <span class="o">=</span> <span class="n">DataFrame</span><span class="p">(</span><span class="n">intData</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">colnames</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">nonglobal_bands</span><span class="p">:</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span><span class="p">]</span> <span class="o">=</span> <span class="n">_calc_float_value</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">df</span><span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">df</span>
+
+
+<span class="k">def</span> <span class="nf">_make_bands</span><span class="p">(</span><span class="n">header_lines</span><span class="p">,</span> <span class="n">varnames</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Make a header dictionary that points to Band objects for each variable</span>
+<span class="sd">    name.</span>
+
+<span class="sd">    Returns: dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">globalEndIdx</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c"># parse global information from global header</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">header_lines</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]):</span>
+        <span class="k">if</span> <span class="n">IsHeaderStart</span><span class="p">(</span><span class="n">l</span><span class="p">):</span>
+            <span class="n">globalEndIdx</span> <span class="o">=</span> <span class="n">i</span>
+            <span class="k">break</span>
+
+    <span class="n">global_header_lines</span> <span class="o">=</span> <span class="n">header_lines</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="n">globalEndIdx</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="c"># tried a prettier dictionary comprehension, but wouldn&#39;t fly</span>
+    <span class="n">global_band_dict</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">global_header_lines</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">l</span><span class="p">:</span>
+            <span class="n">spl</span> <span class="o">=</span> <span class="n">l</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">spl</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;byteorder&#39;</span><span class="p">:</span>
+                <span class="n">global_band_dict</span><span class="p">[</span><span class="n">spl</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">spl</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">global_band_dict</span><span class="p">[</span><span class="n">spl</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">spl</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+
+    <span class="c"># these are the standard names in an ISNOBAL header file</span>
+    <span class="n">byteorder</span> <span class="o">=</span> <span class="n">global_band_dict</span><span class="p">[</span><span class="s">&#39;byteorder&#39;</span><span class="p">]</span>
+    <span class="n">nLines</span> <span class="o">=</span> <span class="n">global_band_dict</span><span class="p">[</span><span class="s">&#39;nlines&#39;</span><span class="p">]</span>
+    <span class="n">nSamps</span> <span class="o">=</span> <span class="n">global_band_dict</span><span class="p">[</span><span class="s">&#39;nsamps&#39;</span><span class="p">]</span>
+    <span class="n">nBands</span> <span class="o">=</span> <span class="n">global_band_dict</span><span class="p">[</span><span class="s">&#39;nbands&#39;</span><span class="p">]</span>
+
+    <span class="c"># this will be put into the return dictionary at the return statement</span>
+    <span class="n">globalBand</span> <span class="o">=</span> <span class="n">GlobalBand</span><span class="p">(</span><span class="n">byteorder</span><span class="p">,</span> <span class="n">nLines</span><span class="p">,</span> <span class="n">nSamps</span><span class="p">,</span> <span class="n">nBands</span><span class="p">)</span>
+
+    <span class="c"># initialize a list of bands to put parsed information into</span>
+    <span class="n">bands</span> <span class="o">=</span> <span class="p">[</span><span class="n">Band</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nBands</span><span class="p">)]</span>
+
+    <span class="c"># bandDict = {&#39;global&#39;: globalBand}</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bands</span><span class="p">):</span>
+        <span class="n">b</span><span class="o">.</span><span class="n">varname</span> <span class="o">=</span> <span class="n">varnames</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">b</span><span class="o">.</span><span class="n">band_idx</span> <span class="o">=</span> <span class="n">i</span>
+
+    <span class="n">band_type</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="n">band_idx</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="n">geo_parsed</span> <span class="o">=</span> <span class="bp">False</span>
+    <span class="n">ref_band</span> <span class="o">=</span> <span class="n">Band</span><span class="p">()</span>
+    <span class="n">geo_count</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">header_lines</span><span class="p">[</span><span class="n">globalEndIdx</span><span class="p">:]:</span>
+
+        <span class="n">spl</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="n">attr</span> <span class="o">=</span> <span class="n">spl</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">IsHeaderStart</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
+
+            <span class="n">band_type</span> <span class="o">=</span> <span class="n">spl</span><span class="p">[</span><span class="n">BAND_TYPE_LOC</span><span class="p">]</span>
+            <span class="n">band_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">spl</span><span class="p">[</span><span class="n">BAND_INDEX_LOC</span><span class="p">])</span>
+
+            <span class="n">lqCounter</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="k">if</span> <span class="n">band_type</span> <span class="o">==</span> <span class="s">&#39;geo&#39;</span><span class="p">:</span>
+                <span class="n">geo_count</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">geo_count</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="n">geo_parsed</span> <span class="o">=</span> <span class="bp">True</span>
+
+        <span class="k">elif</span> <span class="n">band_type</span> <span class="o">==</span> <span class="s">&#39;basic_image&#39;</span><span class="p">:</span>
+            <span class="c"># assign byte and bits info that&#39;s stored here</span>
+            <span class="k">if</span> <span class="n">attr</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;bits&#39;</span><span class="p">,</span> <span class="s">&#39;bytes&#39;</span><span class="p">]:</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">bands</span><span class="p">[</span><span class="n">band_idx</span><span class="p">],</span> <span class="n">attr</span> <span class="o">+</span> <span class="s">&quot;_&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">spl</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+
+        <span class="k">elif</span> <span class="n">band_type</span> <span class="o">==</span> <span class="s">&#39;lq&#39;</span><span class="p">:</span>
+            <span class="c"># assign integer and float min and max. ignore non-&quot;map&quot; fields</span>
+            <span class="k">if</span> <span class="n">attr</span> <span class="o">==</span> <span class="s">&quot;map&quot;</span><span class="p">:</span>
+                <span class="c"># minimum values are listed first by IPW</span>
+                <span class="k">if</span> <span class="n">lqCounter</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">bands</span><span class="p">[</span><span class="n">band_idx</span><span class="p">]</span><span class="o">.</span><span class="n">int_min</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">spl</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+                    <span class="n">bands</span><span class="p">[</span><span class="n">band_idx</span><span class="p">]</span><span class="o">.</span><span class="n">float_min</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">spl</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+                    <span class="n">lqCounter</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                <span class="k">elif</span> <span class="n">lqCounter</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">bands</span><span class="p">[</span><span class="n">band_idx</span><span class="p">]</span><span class="o">.</span><span class="n">int_max</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">spl</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+                    <span class="n">bands</span><span class="p">[</span><span class="n">band_idx</span><span class="p">]</span><span class="o">.</span><span class="n">float_max</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">spl</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+
+        <span class="k">elif</span> <span class="n">band_type</span> <span class="o">==</span> <span class="s">&#39;geo&#39;</span><span class="p">:</span>
+            <span class="c"># Not all bands have geo information. The ones that do are</span>
+            <span class="c"># expected to be redundant. Check that all available are equal</span>
+            <span class="c"># and for any that don&#39;t have geo information, set them to the</span>
+            <span class="c"># geo information</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">geo_parsed</span><span class="p">:</span>
+
+                <span class="k">if</span> <span class="n">attr</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&quot;bline&quot;</span><span class="p">,</span> <span class="s">&quot;bsamp&quot;</span><span class="p">,</span> <span class="s">&quot;dline&quot;</span><span class="p">,</span> <span class="s">&quot;dsamp&quot;</span><span class="p">]:</span>
+                    <span class="nb">setattr</span><span class="p">(</span><span class="n">ref_band</span><span class="p">,</span> <span class="n">attr</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">spl</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+                    <span class="c"># setattr(bands[band_idx], attr, float(spl[2]))</span>
+
+                <span class="k">elif</span> <span class="n">attr</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&quot;units&quot;</span><span class="p">,</span> <span class="s">&quot;coord_sys_ID&quot;</span><span class="p">]:</span>
+                    <span class="k">if</span> <span class="n">attr</span> <span class="o">==</span> <span class="s">&quot;units&quot;</span><span class="p">:</span>
+                        <span class="n">attr</span> <span class="o">=</span> <span class="s">&quot;geo_units&quot;</span>
+                    <span class="nb">setattr</span><span class="p">(</span><span class="n">ref_band</span><span class="p">,</span> <span class="n">attr</span><span class="p">,</span> <span class="n">spl</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+                    <span class="c"># setattr(bands[band_idx], attr, spl[2])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
+                        <span class="s">&quot;&#39;geo&#39; attribute </span><span class="si">%s</span><span class="s"> from IPW file not recognized!&quot;</span> <span class="o">%</span>
+                        <span class="n">attr</span><span class="p">)</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">attr</span> <span class="o">==</span> <span class="s">&quot;units&quot;</span><span class="p">:</span>
+                    <span class="n">attr</span> <span class="o">=</span> <span class="s">&quot;geo_units&quot;</span>
+
+                <span class="k">assert</span>\
+                    <span class="nb">getattr</span><span class="p">(</span><span class="n">ref_band</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span> <span class="o">==</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">bands</span><span class="p">[</span><span class="n">band_idx</span><span class="p">],</span> <span class="n">attr</span><span class="p">)</span>
+
+        <span class="c"># now set all bands to the reference band</span>
+        <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="n">bands</span><span class="p">:</span>
+
+            <span class="n">band</span><span class="o">.</span><span class="n">bline</span> <span class="o">=</span> <span class="n">ref_band</span><span class="o">.</span><span class="n">bline</span>
+            <span class="n">band</span><span class="o">.</span><span class="n">bsamp</span> <span class="o">=</span> <span class="n">ref_band</span><span class="o">.</span><span class="n">bsamp</span>
+            <span class="n">band</span><span class="o">.</span><span class="n">dline</span> <span class="o">=</span> <span class="n">ref_band</span><span class="o">.</span><span class="n">dline</span>
+            <span class="n">band</span><span class="o">.</span><span class="n">dsamp</span> <span class="o">=</span> <span class="n">ref_band</span><span class="o">.</span><span class="n">dsamp</span>
+            <span class="n">band</span><span class="o">.</span><span class="n">geo_units</span> <span class="o">=</span> <span class="n">ref_band</span><span class="o">.</span><span class="n">geo_units</span>
+            <span class="n">band</span><span class="o">.</span><span class="n">coord_sys_ID</span> <span class="o">=</span> <span class="n">ref_band</span><span class="o">.</span><span class="n">coord_sys_ID</span>
+
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">([</span><span class="s">&#39;global&#39;</span><span class="p">]</span><span class="o">+</span><span class="n">varnames</span><span class="p">[:</span><span class="n">nBands</span><span class="p">],</span> <span class="p">[</span><span class="n">globalBand</span><span class="p">]</span><span class="o">+</span><span class="n">bands</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">_calc_float_value</span><span class="p">(</span><span class="n">band</span><span class="p">,</span> <span class="n">integerValue</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate a floating point value for the integer int_ given the min/max int</span>
+<span class="sd">    and min/max floats in the given bandObj</span>
+
+<span class="sd">    Returns: Floating point value of the mapped int_</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">floatRange</span> <span class="o">=</span> <span class="n">band</span><span class="o">.</span><span class="n">float_max</span> <span class="o">-</span> <span class="n">band</span><span class="o">.</span><span class="n">float_min</span>
+
+    <span class="k">return</span> <span class="n">integerValue</span> <span class="o">*</span> <span class="p">(</span><span class="n">floatRange</span> <span class="o">/</span> <span class="n">band</span><span class="o">.</span><span class="n">int_max</span><span class="p">)</span> <span class="o">+</span> <span class="n">band</span><span class="o">.</span><span class="n">float_min</span>
+
+
+<span class="k">def</span> <span class="nf">_bands_to_dtype</span><span class="p">(</span><span class="n">bands</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given a list of Bands, convert them to a numpy.dtype for use in creating</span>
+<span class="sd">    the IPW dataframe.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">dtype</span><span class="p">([(</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span><span class="p">,</span> <span class="s">&#39;uint&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">bytes_</span> <span class="o">*</span> <span class="mi">8</span><span class="p">))</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">bands</span><span class="p">])</span>
+
+
+<span class="k">def</span> <span class="nf">_bands_to_header_lines</span><span class="p">(</span><span class="n">bands_dict</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convert the bands to a new header assuming the float ranges are up to date</span>
+<span class="sd">    for the current dataframe, df.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">firstLine</span> <span class="o">=</span> <span class="s">&quot;!&lt;header&gt; basic_image_i -1 $Revision: 1.11 $&quot;</span>
+
+    <span class="n">global_</span> <span class="o">=</span> <span class="n">bands_dict</span><span class="p">[</span><span class="s">&#39;global&#39;</span><span class="p">]</span>
+
+    <span class="n">firstLines</span> <span class="o">=</span> <span class="p">[</span><span class="n">firstLine</span><span class="p">,</span>
+                  <span class="s">&quot;byteorder = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">global_</span><span class="o">.</span><span class="n">byteorder</span><span class="p">),</span>
+                  <span class="s">&quot;nlines = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">global_</span><span class="o">.</span><span class="n">nLines</span><span class="p">),</span>
+                  <span class="s">&quot;nsamps = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">global_</span><span class="o">.</span><span class="n">nSamps</span><span class="p">),</span>
+                  <span class="s">&quot;nbands = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">global_</span><span class="o">.</span><span class="n">nBands</span><span class="p">)]</span>
+
+    <span class="n">other_lines</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">bands</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span> <span class="k">for</span> <span class="n">varname</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">bands_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span> <span class="k">if</span> <span class="n">varname</span> <span class="o">!=</span> <span class="s">&#39;global&#39;</span><span class="p">]</span>
+
+    <span class="n">bands</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">bands</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">b</span><span class="p">:</span> <span class="n">b</span><span class="o">.</span><span class="n">band_idx</span><span class="p">)</span>
+
+    <span class="c"># for some reason IPW has a space at the end of data lines</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bands</span><span class="p">):</span>
+        <span class="n">other_lines</span> <span class="o">+=</span> <span class="p">[</span><span class="s">&quot;!&lt;header&gt; basic_image {0} $Revision: 1.11 $&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">),</span>
+                       <span class="s">&quot;bytes = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">bytes_</span><span class="p">),</span>
+                       <span class="s">&quot;bits = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">bits_</span><span class="p">)]</span>
+
+    <span class="c"># build the linear quantization (lq) headers</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bands</span><span class="p">):</span>
+        <span class="n">int_min</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">int_min</span><span class="p">)</span>
+        <span class="n">int_max</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">int_max</span><span class="p">)</span>
+
+        <span class="c"># IPW writes integer floats without a dec point, so remove if necessary</span>
+        <span class="n">float_min</span> <span class="o">=</span> \
+            <span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_min</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_min</span><span class="p">))[</span><span class="n">b</span><span class="o">.</span><span class="n">float_min</span> <span class="o">==</span> <span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_min</span><span class="p">)]</span>
+        <span class="n">float_max</span> <span class="o">=</span> \
+            <span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_max</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_max</span><span class="p">))[</span><span class="n">b</span><span class="o">.</span><span class="n">float_max</span> <span class="o">==</span> <span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_max</span><span class="p">)]</span>
+        <span class="n">other_lines</span> <span class="o">+=</span> <span class="p">[</span><span class="s">&quot;!&lt;header&gt; lq {0} $Revision: 1.6 $&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">),</span>
+                        <span class="s">&quot;map = {0} {1} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">int_min</span><span class="p">,</span> <span class="n">float_min</span><span class="p">),</span>
+                        <span class="s">&quot;map = {0} {1} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">int_max</span><span class="p">,</span> <span class="n">float_max</span><span class="p">)]</span>
+
+    <span class="c"># build the geographic header</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bands</span><span class="p">):</span>
+        <span class="n">bline</span> <span class="o">=</span> <span class="n">b</span><span class="o">.</span><span class="n">bline</span>
+        <span class="n">bsamp</span> <span class="o">=</span> <span class="n">b</span><span class="o">.</span><span class="n">bsamp</span>
+        <span class="n">dline</span> <span class="o">=</span> <span class="n">b</span><span class="o">.</span><span class="n">dline</span>
+        <span class="n">dsamp</span> <span class="o">=</span> <span class="n">b</span><span class="o">.</span><span class="n">dsamp</span>
+        <span class="n">units</span> <span class="o">=</span> <span class="n">b</span><span class="o">.</span><span class="n">geo_units</span>
+        <span class="n">coord_sys_ID</span> <span class="o">=</span> <span class="n">b</span><span class="o">.</span><span class="n">coord_sys_ID</span>
+
+        <span class="n">other_lines</span> <span class="o">+=</span> <span class="p">[</span><span class="s">&quot;!&lt;header&gt; geo {0} $Revision: 1.7 $&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">),</span>
+                        <span class="s">&quot;bline = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">bline</span><span class="p">),</span>
+                        <span class="s">&quot;bsamp = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">bsamp</span><span class="p">),</span>
+                        <span class="s">&quot;dline = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dline</span><span class="p">),</span>
+                        <span class="s">&quot;dsamp = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dsamp</span><span class="p">),</span>
+                        <span class="s">&quot;units = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">units</span><span class="p">),</span>
+                        <span class="s">&quot;coord_sys_ID = {0} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">coord_sys_ID</span><span class="p">)]</span>
+
+    <span class="k">return</span> <span class="n">firstLines</span> <span class="o">+</span> <span class="n">other_lines</span>
+
+
+<span class="k">def</span> <span class="nf">_floatdf_to_binstring</span><span class="p">(</span><span class="n">bands</span><span class="p">,</span> <span class="n">df</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convert the dataframe floating point data to a binary string.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># first convert df to an integer dataframe</span>
+    <span class="n">int_df</span> <span class="o">=</span> <span class="n">DataFrame</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="s">&#39;uint64&#39;</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">bands</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">b</span><span class="p">:</span> <span class="n">b</span><span class="o">.</span><span class="n">band_idx</span><span class="p">):</span>
+        <span class="c"># check that bands are appropriately made, that b.Max/Min really are</span>
+        <span class="k">assert</span> <span class="n">df</span><span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span><span class="p">]</span><span class="o">.</span><span class="n">le</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_max</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span> \
+            <span class="s">&quot;Bad band: max not really max.</span><span class="se">\n</span><span class="s">b.float_max = </span><span class="si">%2.10f</span><span class="se">\n</span><span class="s"> </span><span class="se">\</span>
+<span class="s">            df[b.varname].max()  = </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_max</span><span class="p">,</span> <span class="n">df</span><span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+
+        <span class="k">assert</span> <span class="n">df</span><span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span><span class="p">]</span><span class="o">.</span><span class="n">ge</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_min</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span> \
+            <span class="s">&quot;Bad band: min not really min.</span><span class="se">\n</span><span class="s">b.float_min = </span><span class="si">%s</span><span class="se">\n</span><span class="s"> </span><span class="se">\</span>
+<span class="s">            df[b.varname].min()  = </span><span class="si">%2.10f</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_min</span><span class="p">,</span> <span class="n">df</span><span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
+
+        <span class="c"># no need to include b.int_min, it&#39;s always zero</span>
+        <span class="n">map_fn</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> \
+            <span class="n">floor</span><span class="p">(</span><span class="n">npround</span><span class="p">(</span>
+                <span class="p">((</span><span class="n">x</span> <span class="o">-</span> <span class="n">b</span><span class="o">.</span><span class="n">float_min</span><span class="p">)</span> <span class="o">*</span> <span class="n">b</span><span class="o">.</span><span class="n">int_max</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">float_max</span> <span class="o">-</span> <span class="n">b</span><span class="o">.</span><span class="n">float_min</span><span class="p">)))</span>
+
+        <span class="n">int_df</span><span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span><span class="p">]</span> <span class="o">=</span> <span class="n">map_fn</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span><span class="p">])</span>
+
+    <span class="c"># use the struct package to pack ints to bytes; use &#39;=&#39; to prevent padding</span>
+    <span class="c"># that causes problems with the IPW scheme</span>
+    <span class="n">pack_str</span> <span class="o">=</span> <span class="s">&quot;=&quot;</span> <span class="o">+</span> <span class="s">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">PACK_DICT</span><span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">bytes_</span><span class="p">]</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">bands</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">b</span><span class="s">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="n">pack_str</span><span class="p">,</span> <span class="o">*</span><span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">int_df</span><span class="o">.</span><span class="n">iterrows</span><span class="p">()])</span>
+
+
+<span class="k">def</span> <span class="nf">_recalculate_header</span><span class="p">(</span><span class="n">bands</span><span class="p">,</span> <span class="n">dataframe</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Recalculate the minimum and maximum of each band in bands given a dataframe</span>
+<span class="sd">    that contains data for each band.</span>
+
+<span class="sd">    Returns: None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">dataframe</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span> <span class="o">==</span> <span class="nb">set</span><span class="p">([</span><span class="n">b</span><span class="o">.</span><span class="n">varname</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">bands</span><span class="p">]),</span> \
+        <span class="s">&quot;DataFrame column names do not match bands&#39; variable names!&quot;</span>
+
+    <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="n">bands</span><span class="p">:</span>
+        <span class="n">band</span><span class="o">.</span><span class="n">float_min</span> <span class="o">=</span> <span class="n">dataframe</span><span class="p">[</span><span class="n">band</span><span class="o">.</span><span class="n">varname</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+        <span class="n">band</span><span class="o">.</span><span class="n">float_max</span> <span class="o">=</span> <span class="n">dataframe</span><span class="p">[</span><span class="n">band</span><span class="o">.</span><span class="n">varname</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">float_min</span> <span class="o">==</span> <span class="n">band</span><span class="o">.</span><span class="n">float_max</span><span class="p">:</span>
+            <span class="n">band</span><span class="o">.</span><span class="n">float_max</span> <span class="o">=</span> <span class="n">band</span><span class="o">.</span><span class="n">float_min</span> <span class="o">+</span> <span class="mf">1.0</span>
+
+    <span class="k">return</span> <span class="bp">None</span>
+
+
+<span class="k">class</span> <span class="nc">Band</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Container for band information</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">varname</span><span class="o">=</span><span class="s">&quot;&quot;</span><span class="p">,</span> <span class="n">band_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">nBytes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">nBits</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">int_min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                 <span class="n">int_max</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">float_min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">float_max</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                 <span class="n">bline</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">bsamp</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">dline</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">dsamp</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                 <span class="n">units</span><span class="o">=</span><span class="s">&quot;meters&quot;</span><span class="p">,</span> <span class="n">coord_sys_ID</span><span class="o">=</span><span class="s">&quot;UTM&quot;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Can either pass this information or create an all-None Band.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">varname</span> <span class="o">=</span> <span class="n">varname</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">band_idx</span> <span class="o">=</span> <span class="n">band_idx</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bytes_</span> <span class="o">=</span> <span class="n">nBytes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bits_</span> <span class="o">=</span> <span class="n">nBits</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">int_min</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">int_min</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">int_max</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">int_max</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">float_min</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">float_min</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">float_max</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">float_max</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bline</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">bline</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bsamp</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">bsamp</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dline</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">dline</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dsamp</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">dsamp</span><span class="p">)</span>
+
+        <span class="k">assert</span> <span class="nb">type</span><span class="p">(</span><span class="n">units</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">geo_units</span> <span class="o">=</span> <span class="n">units</span>
+
+        <span class="k">assert</span> <span class="nb">type</span><span class="p">(</span><span class="n">coord_sys_ID</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coord_sys_ID</span> <span class="o">=</span> <span class="n">coord_sys_ID</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s">&quot;-- &quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">varname</span> <span class="o">+</span> <span class="s">&quot; --</span><span class="se">\n</span><span class="s">&quot;</span> <span class="o">+</span>\
+            <span class="s">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">attr</span> <span class="o">+</span> <span class="s">&quot;: &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+                     <span class="k">for</span> <span class="n">attr</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">__dict__</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()])</span>
+
+
+<span class="k">class</span> <span class="nc">IPWLines</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Data structure to wrap header and binary parts of an IPW file.</span>
+
+<span class="sd">    Arguments: ipwFile -- file name pointing to an IPW file</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ipw_file</span><span class="p">):</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">ipw_file</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">lines</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
+
+        <span class="n">last_header_idx</span> <span class="o">=</span> \
+            <span class="p">[(</span><span class="n">i</span><span class="p">,</span> <span class="n">l</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="k">if</span> <span class="s">&quot;
+&quot;</span> <span class="ow">in</span> <span class="n">l</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">split_idx</span> <span class="o">=</span> <span class="n">last_header_idx</span> <span class="o">+</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">header_lines</span> <span class="o">=</span> <span class="n">lines</span><span class="p">[:</span><span class="n">split_idx</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">binary_data</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">[</span><span class="n">split_idx</span><span class="p">:])</span>
+
+
+<span class="k">class</span> <span class="nc">IPWFileError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">class</span> <span class="nc">ISNOBALNetcdfError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">pass</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../../../index.html">
+              <img class="logo" src="../../../_static/wc_wave_triangles.png" alt="Logo"/>
+            </a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Tri-State EPSCoR: WC-WAVE.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.4</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

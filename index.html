@@ -1,0 +1,416 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Python API for the Virtual Watershed &mdash; VW Python API</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="VW Python API" href="#" />
+    <link rel="next" title="Virtual Watershed Adaptor" href="watershed.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="watershed.html" title="Virtual Watershed Adaptor"
+             accesskey="N">next</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">VW Python API</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <img alt="_images/WC-WAVE_banner.png" src="_images/WC-WAVE_banner.png" />
+<div class="section" id="python-api-for-the-virtual-watershed">
+<h1>Python API for the Virtual Watershed<a class="headerlink" href="#python-api-for-the-virtual-watershed" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="developer-tools-for-building-scientific-applications">
+<h2>Developer Tools for Building Scientific Applications<a class="headerlink" href="#developer-tools-for-building-scientific-applications" title="Permalink to this headline">¶</a></h2>
+<p>The virtual watershed platform has been built of various <a class="reference external" href="http://www.nsf.gov/div/index.jsp?div=ACI">&#8220;cyberinfrastructure&#8221;</a>
+resources. At the backbone of these resources is a robust data management platform,
+which we&#8217;ll call the VW Data Engine (VWDE).
+Using the VWDE as a powerful provider of data (web) services, we are also
+building add-on web services that run hydrological models, and cutting-edge 3D immersive
+visualization environments. The &#8220;adaptors&#8221; are the glue that holds this together
+in a single framework. This Python API mainly provides adaptors for interacting
+with various facets of the virtual watershed.</p>
+<p>There are adaptors for getting data into the data engine, adaptors that check
+which models the NetCDF files output from grid making are compatible with,
+adaptors that convert model output back to our common format, NetCDF, and create metadata so
+that all this data can be (re)discovered later using the data engine&#8217;s API.
+We deliver this complete package through a web app, which can be thought of as
+the human adaptor, though that is contained in the
+<a class="reference external" href="https://github.com/mtpain/vwplatform">vwplatform</a>.</p>
+<p>To get started interacting with the VWDE through the Python adaptor API,
+continue reading this quickstart guide. It will guide you
+through a series of commands that you can use right now in a Python shell.
+IPython is a really handy shell and is recommended in general and for this
+tutorial guide.</p>
+<p>If you are looking for API documentation, see below</p>
+<p><strong>API Documentation Table of Contents</strong></p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="watershed.html">Virtual Watershed Adaptor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="isnobal.html">Python ISNOBAL Interface</a></li>
+</ul>
+</div>
+</div>
+<div class="section" id="connect-to-and-query-the-vwde">
+<h2>Connect to and query the VWDE<a class="headerlink" href="#connect-to-and-query-the-vwde" title="Permalink to this headline">¶</a></h2>
+<p>First, the pre-requisites are:</p>
+<ol class="arabic simple">
+<li>You&#8217;ve followed the installation instructions at the <a class="reference external" href="https://github.com/tri-state-epscor/wcwave_adaptors">wcwave_adaptors GitHub page</a>.</li>
+<li>You&#8217;ve added the  <code class="docutils literal"><span class="pre">wcwave_adaptors</span></code> to your path, either through <code class="docutils literal"><span class="pre">sys.path.append('~/path/to/adaptors')</span></code> or through the <code class="docutils literal"><span class="pre">$PYTHONPATH</span></code> environment variable.</li>
+<li>You have an account with the Virtual Watershed data engine, which you must ask for. Please email <a class="reference external" href="mailto:maturner&#37;&#52;&#48;uidaho&#46;edu">Matt Turner</a> for an account.</li>
+</ol>
+<p>Now in an IPython (or other) shell, follow along with these examples.</p>
+<p>To connect to the virtual watershed</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">wcwave_adaptors</span> <span class="kn">import</span> <span class="n">VWClient</span>
+<span class="n">vw_client</span> <span class="o">=</span> <span class="n">VWClient</span><span class="p">(</span><span class="s">&#39;https://vwp-dev.unm.edu&#39;</span><span class="p">,</span> <span class="s">&#39;your-username&#39;</span><span class="p">,</span> <span class="s">&#39;your-password&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>If you have been authenticated correctly, this will finish silently.</p>
+<p>You may also use this</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">vw_client</span> <span class="o">=</span> <span class="n">default_vw_client</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>But in order for this to work, you must have personalized your <code class="docutils literal"><span class="pre">default.conf</span></code>
+as described in the <a class="reference external" href="https://github.com/tri-state-epscor/wcwave_adaptors#configuration-files">wcwave_adaptors README</a>.</p>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">The timeout period is undocumented for the VWDE, but seems short. If you
+ever have a long output of HTML returned instead of what this guide says you
+should get, repeat the above step to re-authenticate.</p>
+</div>
+<p>In order to query all datasets and how many are in the virtual watershed,</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">search_result</span> <span class="o">=</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">dataset_search</span><span class="p">()</span>
+
+<span class="kn">from</span> <span class="nn">wcwave_adaptors</span> <span class="kn">import</span> <span class="n">QueryResult</span>
+<span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">search_result</span><span class="p">,</span> <span class="n">QueryResult</span><span class="p">)</span>
+
+<span class="c"># search</span>
+<span class="n">total_records</span> <span class="o">=</span> <span class="n">search_result</span><span class="o">.</span><span class="n">total</span>
+<span class="n">n_recs_returned</span> <span class="o">=</span> <span class="n">search_result</span><span class="o">.</span><span class="n">subtotal</span>
+<span class="k">assert</span> <span class="n">n_recs_returned</span> <span class="o">==</span> <span class="mi">15</span>  <span class="c"># because that is default number of recs returned</span>
+
+<span class="c"># get the actual search records</span>
+<span class="n">records</span> <span class="o">=</span> <span class="n">search_result</span><span class="o">.</span><span class="n">records</span>
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">records</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_recs_returned</span>  <span class="c"># because that is default number of recs returned</span>
+
+<span class="n">first_dataset_metadata</span> <span class="o">=</span> <span class="n">records</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">first_dataset_metadata</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">In Python, writing <code class="docutils literal"><span class="pre">assert</span> <span class="pre">...</span></code> causes Python to throw an error if the
+statement is <code class="docutils literal"><span class="pre">False</span></code>. Otherwise, the program continues on uninterrupted.</p>
+</div>
+<p>If you <code class="docutils literal"><span class="pre">print</span> <span class="pre">r0</span></code>, you will see the actual metadata record which someone has
+generated and inserted for the data. There you can also see the <code class="docutils literal"><span class="pre">downloads</span></code>
+section of the metadata, which is a list of dictionaries. This contains the
+download link for the data file that the metadata represents. Access it like so:</p>
+<div class="highlight-python"><div class="highlight"><pre>In [17]: print r0[&#39;downloads&#39;][0][&#39;bin&#39;];
+Out[17]: u&#39;http://vwp-dev.unm.edu/apps/vwp/datasets/a33893dd-d919-472a-8583-b35d9cda967a/in.0000.original.bin&#39;
+</pre></div>
+</div>
+<p>Navigate there (or click the following link) and you will download the iSNOBAL
+input file <code class="docutils literal"><span class="pre">in.0000</span></code>
+(<a class="reference external" href="http://vwp-dev.unm.edu/apps/vwp/datasets/a33893dd-d919-472a-8583-b35d9cda967a/in.0000.original.bin">http://vwp-dev.unm.edu/apps/vwp/datasets/a33893dd-d919-472a-8583-b35d9cda967a/in.0000.original.bin</a>).
+All this metadata is for this one file.</p>
+<p>This may seem overwhelming, but the <code class="docutils literal"><span class="pre">wcwave_adaptors</span></code> provide help to create
+this metadata, which is the topic of the next section.</p>
+</div>
+<div class="section" id="create-vw-metadata-and-insert-it-to-the-database">
+<h2>Create VW metadata and insert it to the database<a class="headerlink" href="#create-vw-metadata-and-insert-it-to-the-database" title="Permalink to this headline">¶</a></h2>
+<p>To follow along with this example, download the binary file linked to above
+to your current working directory. We will create a new &#8220;model run&#8221; in the
+Virtual Watershed Data Engine, upload our data (a &#8220;dataset&#8221; in VWDE terms)
+tagged as part of this new model run, and then create and insert metadata for
+that dataset.</p>
+<p>First, we will create a new model run, which returns the model run UUID
+generated by the VWDE. We will use this in later steps to tell the VWDE which
+uploaded files belong to what model run UUID.</p>
+<div class="section" id="create-a-new-model-run">
+<h3>Create a new model run<a class="headerlink" href="#create-a-new-model-run" title="Permalink to this headline">¶</a></h3>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># create a new model run</span>
+<span class="n">new_mr_uuid</span> <span class="o">=</span> \
+    <span class="n">vw_client</span><span class="o">.</span><span class="n">initialize_model_run</span><span class="p">(</span>
+        <span class="n">model_run_name</span><span class="o">=</span><span class="s">&#39;example model run for vw-doc&#39;</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s">&#39;will be inserting only one file, in.0000, a multi-banded iSNOBAL input grid file&#39;</span><span class="p">,</span>
+        <span class="n">researcher_name</span><span class="o">=</span><span class="s">&#39;Matt Turner&#39;</span><span class="p">,</span> <span class="n">keywords</span><span class="o">=</span><span class="s">&#39;isnobal,example,idaho&#39;</span><span class="p">)</span>
+
+<span class="k">print</span> <span class="n">new_mr_uuid</span>  <span class="c"># something like u&#39;0a3e8c1f-c09a-46a3-8acb-6816ebd25e69&#39;</span>
+</pre></div>
+</div>
+<p>Now we could use another search, the model run search, to search for datasets
+associated with our new model run.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">mr_search_results</span> <span class="o">=</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">modelrun_search</span><span class="p">()</span>
+<span class="n">new_mr</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">res</span><span class="o">.</span><span class="n">records</span> <span class="k">if</span> <span class="n">r</span><span class="p">[</span><span class="s">&#39;Model Run UUID&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">new_mr_uuid</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>The first and only element of the list new_mr is (with a different UUID)</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">[{</span><span class="s">u&#39;Description&#39;</span><span class="p">:</span> <span class="s">u&#39;will be inserting only one file, in.0000, a multi-banded iSNOBAL input grid file&#39;</span><span class="p">,</span>
+  <span class="s">u&#39;Keywords&#39;</span><span class="p">:</span> <span class="s">u&#39;isnobal,example,idaho&#39;</span><span class="p">,</span>
+  <span class="s">u&#39;Model Run Name&#39;</span><span class="p">:</span> <span class="s">u&#39;example model run for vw-doc&#39;</span><span class="p">,</span>
+  <span class="s">u&#39;Model Run UUID&#39;</span><span class="p">:</span> <span class="s">u&#39;a26e4bbc-6481-4525-8988-d30e7db28df8&#39;</span><span class="p">,</span>
+  <span class="s">u&#39;Researcher Name&#39;</span><span class="p">:</span> <span class="s">u&#39;Matt Turner&#39;</span><span class="p">}]</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="upload-data-and-generate-and-insert-metadata">
+<h3>Upload Data and Generate and Insert Metadata<a class="headerlink" href="#upload-data-and-generate-and-insert-metadata" title="Permalink to this headline">¶</a></h3>
+<p>The first step is to upload the data to the virtual watershed for which we&#8217;ll be
+making and inserting metadata. The VWDE returns an HTTP error if we
+try to insert metadata for which no data exists.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># upload file to VWDE</span>
+<span class="n">upl_res</span> <span class="o">=</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">upload</span><span class="p">(</span><span class="n">new_mr_uuid</span><span class="p">,</span> <span class="s">&#39;in.0000&#39;</span><span class="p">)</span>
+
+<span class="k">print</span> <span class="n">res</span>  <span class="c"># &lt;Response [200]&gt;</span>
+<span class="k">print</span> <span class="n">res</span><span class="o">.</span><span class="n">text</span>  <span class="c"># u&#39;OK&#39;</span>
+</pre></div>
+</div>
+<p>Next, we need to generate some metadata for this record, and we could use
+<code class="docutils literal"><span class="pre">make_watershed_metadata</span></code>, but instead we will use the higher-level
+<code class="docutils literal"><span class="pre">metadata_from_file</span></code> function.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">input_file</span> <span class="o">=</span> <span class="s">&#39;in.0000&#39;</span>
+<span class="n">parent_uuid</span> <span class="o">=</span> <span class="n">new_mr_uuid</span>
+<span class="n">description</span> <span class="o">=</span> <span class="s">&#39;isnobal input #1&#39;</span>
+<span class="n">watershed_name</span> <span class="o">=</span> <span class="s">&#39;Dry Creek&#39;</span>
+<span class="n">state</span> <span class="o">=</span> <span class="s">&#39;Idaho&#39;</span>
+<span class="n">start_datetime</span> <span class="o">=</span> <span class="s">&#39;2010-01-01 00:00:00&#39;</span>
+<span class="n">end_datetime</span> <span class="o">=</span> <span class="s">&#39;2010-01-01 01:00:00&#39;</span>
+<span class="n">model_name</span> <span class="o">=</span> <span class="s">&#39;isnobal&#39;</span>
+
+<span class="c"># create XML FGDC-standard metadata that gets included in VW metadata</span>
+<span class="n">fgdc_metadata</span> <span class="o">=</span> <span class="n">make_fgdc_metadata</span><span class="p">(</span><span class="n">input_file</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="n">new_mr_uuid</span><span class="p">,</span>
+    <span class="n">start_datetime</span><span class="p">,</span> <span class="n">end_datetime</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model_name</span><span class="p">)</span>
+
+<span class="c"># create VW metadata</span>
+<span class="n">watershed_metadata</span> <span class="o">=</span> <span class="n">metadata_from_file</span><span class="p">(</span><span class="n">input_file</span><span class="p">,</span> <span class="n">parent_uuid</span><span class="p">,</span>
+    <span class="n">new_mr_uuid</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">watershed_name</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span>
+    <span class="n">start_datetime</span><span class="o">=</span><span class="n">start_datetime</span><span class="p">,</span> <span class="n">end_datetime</span><span class="o">=</span><span class="n">end_datetime</span><span class="p">,</span>
+    <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span> <span class="n">fgdc_metadata</span><span class="o">=</span><span class="n">fgdc_metadata</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Now when you <code class="docutils literal"><span class="pre">print</span> <span class="pre">watershed_metadata</span></code>, you will see something that looks
+like the first record we pulled out after we made our first dataset query.</p>
+<p>Next we insert the metadata we just created, making use of our <code class="docutils literal"><span class="pre">vw_client</span></code>.
+If you get a weird error message, try re-connecting as shown in the very first
+steps.</p>
+<p>Upload</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">response</span> <span class="o">=</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">insert_metadata</span><span class="p">(</span><span class="n">watershed_metadata</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="s">&quot;Code not 200, Insert failed!&quot;</span>
+</pre></div>
+</div>
+<p>And if the insert succeeded, <code class="docutils literal"><span class="pre">response.text</span></code> is a new UUID, which is the dataset UUID. It&#8217;s
+possible to insert the same metadata record multiple times, which may be a bug,
+but either way it will stay that way for a while. A new metadata record will be
+created every time even if you insert the exact same <code class="docutils literal"><span class="pre">watershed_metadata</span></code>.</p>
+<p>Now, assuming you&#8217;ve only ran the above command once, you can see the record you
+just inserted by</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">res</span> <span class="o">=</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">dataset_search</span><span class="p">(</span><span class="n">model_run_uuid</span><span class="o">=</span><span class="n">new_mr_uuid</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">res</span><span class="o">.</span><span class="n">total</span> <span class="o">==</span> <span class="mi">1</span>
+
+<span class="k">print</span> <span class="n">res</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>If you insert a geotiff, <code class="docutils literal"><span class="pre">metadata_from_file</span></code> detects it as ready for visualization, and
+marks the metadata as such by setting <code class="docutils literal"><span class="pre">'model_set_type':</span> <span class="pre">'vis'</span></code>. OGC web
+services WMS and WCS will also be enabled.</p>
+<p>To try this, download this geotiff from the virtual watershed:
+<code class="docutils literal"><span class="pre">http://vwp-dev.unm.edu/apps/vwp/datasets/8561e37b-6236-4156-9347-cce7582260cf/in.0008.I_lw.tif.original.tif</span></code>
+and extract and move the tiff to your current working directory. This file is
+a geotiff of long-wave input radiation for the ninth time step of an iSNOBAL
+model run.</p>
+<p>Now everything else is the same, except input_file. First we&#8217;ll upload our
+new tif file and then create metadata and insert that.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">input_file</span> <span class="o">=</span> <span class="s">&#39;in.0008.I_lw.tif&#39;</span>
+<span class="c"># the ninth time step starts at 8:00 AM for this data</span>
+<span class="n">start_datetime</span> <span class="o">=</span> <span class="s">&#39;2010-01-01 08:00:00&#39;</span>
+<span class="n">end_datetime</span> <span class="o">=</span> <span class="s">&#39;2010-01-01 09:00:00&#39;</span>
+
+<span class="n">upl_res</span> <span class="o">=</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">upload</span><span class="p">(</span><span class="n">new_mr_uuid</span><span class="p">,</span> <span class="n">input_file</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">upl_res</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">,</span> <span class="s">&quot;Error on upload!&quot;</span>
+
+<span class="n">description</span> <span class="o">=</span> <span class="s">&#39;isnobal I_lw geotiff #9&#39;</span>
+
+<span class="n">fgdc_metadata</span> <span class="o">=</span> <span class="n">make_fgdc_metadata</span><span class="p">(</span><span class="n">input_file</span><span class="p">,</span> <span class="n">parent_uuid</span><span class="p">,</span>
+    <span class="n">start_datetime</span><span class="o">=</span><span class="n">start_datetime</span><span class="p">,</span> <span class="n">end_datetime</span><span class="o">=</span><span class="n">end_datetime</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model_name</span><span class="p">)</span>
+
+<span class="n">watershed_metadata</span> <span class="o">=</span> <span class="n">metadata_from_file</span><span class="p">(</span><span class="n">input_file</span><span class="p">,</span> <span class="n">parent_uuid</span><span class="p">,</span>
+    <span class="n">new_mr_uuid</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">watershed_name</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span>
+    <span class="n">start_datetime</span><span class="o">=</span><span class="n">start_datetime</span><span class="p">,</span> <span class="n">end_datetime</span><span class="o">=</span><span class="n">end_datetime</span><span class="p">,</span>
+    <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span> <span class="n">fgdc_metadata</span><span class="o">=</span><span class="n">fgdc_metadata</span><span class="p">)</span>
+
+<span class="n">vw_client</span><span class="o">.</span><span class="n">insert_metadata</span><span class="p">(</span><span class="n">watershed_metadata</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Now you can search for visualization-enabled datasets for the model run we&#8217;ve
+created here like so:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">res</span> <span class="o">=</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">dataset_search</span><span class="p">(</span><span class="n">model_set_type</span><span class="o">=</span><span class="s">&#39;vis&#39;</span><span class="p">,</span> <span class="n">model_run_uuid</span><span class="o">=</span><span class="n">new_mr_uuid</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">res</span><span class="o">.</span><span class="n">total</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&quot;There are either zero or more than expected results!&quot;</span>
+</pre></div>
+</div>
+<p>When you view the single record using</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">print</span> <span class="n">res</span><span class="o">.</span><span class="n">records</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>look for the WCS and WMS blocks, which you can print like so</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">print</span> <span class="n">res</span><span class="o">.</span><span class="n">records</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s">&#39;services&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>which will show</p>
+<div class="highlight-python"><div class="highlight"><pre>{u&#39;wms&#39;: u&#39;http://vwp-dev.unm.edu/apps/vwp/datasets/687189e1-a2f4-4fce-8d46-da5589aea70c/services/ogc/wms?SERVICE=wms&amp;REQUEST=GetCapabilities&amp;VERSION=1.1.1&#39;},
+{u&#39;wcs&#39;: u&#39;http://vwp-dev.unm.edu/apps/vwp/datasets/687189e1-a2f4-4fce-8d46-da5589aea70c/services/ogc/wcs?SERVICE=wcs&amp;REQUEST=GetCapabilities&amp;VERSION=1.1.2&#39;}]
+</pre></div>
+</div>
+<p>You can load either of these into ArcGIS or QGIS and visualize the dataset
+you&#8217;ve just uploaded.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">There is a function called <code class="docutils literal"><span class="pre">upsert</span></code> that works on directories as well as
+files to upload data and generate and insert associated metadata. It works
+only for properly-formatted iSNOBAL inputs and outputs. It may simply be
+removed or just heavily refactored in the future.</p>
+</div>
+</div>
+<div class="section" id="advanced-model-run-tracking-using-parent-model-runs">
+<h3>Advanced Model Run Tracking using Parent Model Runs<a class="headerlink" href="#advanced-model-run-tracking-using-parent-model-runs" title="Permalink to this headline">¶</a></h3>
+<p>Above, we set <code class="docutils literal"><span class="pre">parent_uuid</span> <span class="pre">=</span> <span class="pre">new_mr_uuid</span></code>. However, what if, for example,
+some data is derived from another set of data. More specifically, consider the
+case where we modify observed data to see what the sensitivity of a model is
+with respect to certain variables. Then the modified data could be seen as a
+&#8220;child&#8221; set of data. In this case, the modified data&#8217;s <code class="docutils literal"><span class="pre">parent_model_run_uuid</span></code>
+would be the observed data&#8217;s <code class="docutils literal"><span class="pre">model_run_uuid</span></code>.</p>
+<p>This allows us to better discover data by its &#8220;lineage&#8221;.</p>
+</div>
+</div>
+<div class="section" id="delete-a-model-run">
+<h2>Delete a Model Run<a class="headerlink" href="#delete-a-model-run" title="Permalink to this headline">¶</a></h2>
+<p>Unfortunately, there is no way to run the VWDE locally, so all testing must be
+done against the shared development system. This means that the sample data and
+metadata that we&#8217;ve pushed to the server is just sitting there never to be used
+again. In this case, we need to delete our model run. We would also want to do
+this if, for example, a process failed after writing partial data to the VWDE.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># remove all data and the model run entry that we&#39;ve created</span>
+<span class="n">vw_client</span><span class="o">.</span><span class="n">delete_model_run</span><span class="p">(</span><span class="n">new_mr_uuid</span><span class="p">)</span>
+
+<span class="c"># prove that nothing is left</span>
+<span class="n">new_mr_entry</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">modelrun_search</span><span class="p">()</span><span class="o">.</span><span class="n">records</span> <span class="k">if</span> <span class="n">r</span><span class="p">[</span><span class="s">&#39;Model Run UUID&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">new_mr_uuid</span><span class="p">]</span>
+
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">new_mr_entry</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+<span class="k">assert</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">dataset_search</span><span class="p">(</span><span class="n">model_run_uuid</span><span class="o">=</span><span class="n">new_mr_uuid</span><span class="p">)</span><span class="o">.</span><span class="n">total</span> <span class="o">==</span> <span class="mi">0</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
+<ul class="simple">
+<li><a class="reference internal" href="genindex.html"><span>Index</span></a></li>
+<li><a class="reference internal" href="py-modindex.html"><span>Module Index</span></a></li>
+<li><a class="reference internal" href="search.html"><span>Search Page</span></a></li>
+</ul>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="#">
+              <img class="logo" src="_static/wc_wave_triangles.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="#">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Python API for the Virtual Watershed</a><ul>
+<li><a class="reference internal" href="#developer-tools-for-building-scientific-applications">Developer Tools for Building Scientific Applications</a></li>
+<li><a class="reference internal" href="#connect-to-and-query-the-vwde">Connect to and query the VWDE</a></li>
+<li><a class="reference internal" href="#create-vw-metadata-and-insert-it-to-the-database">Create VW metadata and insert it to the database</a><ul>
+<li><a class="reference internal" href="#create-a-new-model-run">Create a new model run</a></li>
+<li><a class="reference internal" href="#upload-data-and-generate-and-insert-metadata">Upload Data and Generate and Insert Metadata</a></li>
+<li><a class="reference internal" href="#advanced-model-run-tracking-using-parent-model-runs">Advanced Model Run Tracking using Parent Model Runs</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#delete-a-model-run">Delete a Model Run</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+</ul>
+
+  <h4>Next topic</h4>
+  <p class="topless"><a href="watershed.html"
+                        title="next chapter">Virtual Watershed Adaptor</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Tri-State EPSCoR: WC-WAVE.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.4</a>
+      
+      |
+      <a href="_sources/index.txt"
+          rel="nofollow">Page source</a></li>
+    </div>
+
+    
+
+    
+  </body>
+</html>

@@ -1,0 +1,552 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>CF-NetCDF as reference data model for VW &mdash; VW Python API</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="VW Python API" href="index.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="index.html">VW Python API</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="cf-netcdf-as-reference-data-model-for-vw">
+<h1>CF-NetCDF as reference data model for VW<a class="headerlink" href="#cf-netcdf-as-reference-data-model-for-vw" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="intro">
+<h2>Intro<a class="headerlink" href="#intro" title="Permalink to this headline">¶</a></h2>
+<p>In this project we want to collect mutually relevant data from WC-WAVE
+researchers that will be discoverable as a first step to being usable by
+other WC-WAVE researchers for whatever model they choose. In short, this
+necessitated the choice of a data model. The NetCDF data model itself is
+sensible and implemented in common programming languages, but it also offers
+web-based tools (a RESTful API?) for selecting and downloading only subsets of
+data on disk. Since NetCDF knows how to slice by loading selectively from disk,
+the user does not have to load everything into memory before slicing.</p>
+<p>NetCDF is intended as a self-describing data format. In other words, it contains
+its own metadata. The Climate and Forecast (CF) conventions provide a common
+guiding framework for writing this metadata, so that other any researcher
+following the CF standard can easily share or process thiers or others&#8217; data
+with a common set of tools like
+<a class="reference external" href="http://www.met.reading.ac.uk/~andy/cfplot_sphinx/_build/html/">cfplot</a>.
+CF has the canonical documentation on its standard on its organization page:
+<a class="reference external" href="http://cfconventions.org/documents.html">http://cfconventions.org/documents.html</a>.</p>
+<p>Although necessary for creating a cutting-edge toolset for hydrological
+modeling, all this infrastructure comes with some conceptual overhead. Here is
+some background on the CF-NetCDF format.</p>
+</div>
+<div class="section" id="resources-for-understanding-netcdf-python">
+<h2>Resources for Understanding NetCDF(-python)<a class="headerlink" href="#resources-for-understanding-netcdf-python" title="Permalink to this headline">¶</a></h2>
+<p>Because Python seems to be the most widely used language in our project, we will
+be using and supporting the <a class="reference external" href="https://github.com/Unidata/netcdf4-python">NetCDF-python API</a>.</p>
+<p>Probably the best way to quickly get a feel for NetCDF, model and Python
+interface, is to see these two python notebooks by the creator of the
+NetCDF-python API: <a class="reference external" href="http://nbviewer.ipython.org/github/Unidata/netcdf4-python/blob/master/examples/reading_netCDF.ipynb">reading_netCDF.ipynb</a>
+and
+<a class="reference external" href="http://nbviewer.ipython.org/github/Unidata/netcdf4-python/blob/master/examples/writing_netCDF.ipynb">writing_netCDF.ipynb</a>.</p>
+<p>Also, have a look at the basic data model for NetCDF files:</p>
+<div class="figure" id="id2">
+<img alt="Classic Data Model" src="_images/nc-classic-uml.png" />
+<p class="caption"><span class="caption-text">Classic Data Model</span></p>
+</div>
+<p>Taken from <a class="reference external" href="http://www.unidata.ucar.edu/software/netcdf/docs/html_tutorial/nc-classic-uml.png">UNIDATA
+site</a>.
+There are some important things to note so we are speaking the same language.
+First, a <code class="docutils literal"><span class="pre">Dataset</span></code> is a <em>container</em> for <code class="docutils literal"><span class="pre">dimensions</span></code>, <code class="docutils literal"><span class="pre">variables</span></code>, and
+<code class="docutils literal"><span class="pre">attributes</span></code>, themselves containers for their data and metadata about
+themselves or the <code class="docutils literal"><span class="pre">Dataset</span></code>. The next part will require the basic understanding
+gained from working through the above ipynb&#8217;s.</p>
+</div>
+<div class="section" id="example-1-create-a-netcdf-of-temperature-on-a-grid">
+<h2>Example 1: Create a NetCDF of temperature on a grid<a class="headerlink" href="#example-1-create-a-netcdf-of-temperature-on-a-grid" title="Permalink to this headline">¶</a></h2>
+<p>In overly simple terms we use NetCDF to represent data as a function of some
+coordinates, like a grid of longitude and latitude values. This example will
+show how we create a NetCDF of air temperatures on a 3x4 grid.</p>
+<p>First, in order to follow the CF standard for our variable name, we need to
+check what we should use at the <a class="reference external" href="http://cfconventions.org/Data/cf-standard-names/27/build/cf-standard-name-table.html">web tool for CF standard names</a>.
+Luckily this one is easy, the standard name is <cite>air_temperature</cite>, and actually
+the standard name goes in the metadata about the variable. We just call the
+python variable <code class="docutils literal"><span class="pre">temp</span></code>. Some of the code is taken directly from the
+<a class="reference external" href="http://nbviewer.ipython.org/github/Unidata/netcdf4-python/blob/master/examples/writing_netCDF.ipynb">writing_netCDF.ipynb</a>.
+example from the netCDF-python documentation.</p>
+<p>To represent the &#8220;x&#8221; and &#8220;y&#8221; latitude and longitude coordinates, we consult
+Chapter 4 of the CF standard, <a class="reference external" href="http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/ch04.html">Coordinate types</a>.
+We will format and give attributes for our coordinate variables, latitude and
+longitude, according to the instructions there.</p>
+<p>The process of creating a new .nc dataset is:</p>
+<ol class="arabic simple">
+<li>Create an empty Dataset object</li>
+<li>Create the &#8216;dimensions&#8217;, e.g. lat, lon, altitude, time</li>
+<li>Create the variables. Each of the dimensions has an associated variable
+where the actual values of the dimension are stored. Here we also attach
+weather data like temperature, snow water equivalent, solar radiation, etc.</li>
+<li>Add attributes, which are just additional metadata. There is global- and
+variable-scope metadata. See CF Conventions <a class="reference external" href="http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/ch02s06.html">Section 2.6: Attributes</a>
+for the reference documentation.</li>
+</ol>
+<p>Here&#8217;s the code for creating this grid of temperature data:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
+<span class="kn">import</span> <span class="nn">netCDF4</span>      <span class="c"># Note: python is case-sensitive!</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>  <span class="c"># numpy provides our data types; see var init below</span>
+
+<span class="c"># initialize new dataset</span>
+<span class="n">ncfile</span> <span class="o">=</span> <span class="n">netCDF4</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span><span class="s">&#39;new.nc&#39;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s">&#39;w&#39;</span><span class="p">,</span> <span class="n">format</span><span class="o">=</span><span class="s">&#39;NETCDF4_CLASSIC&#39;</span><span class="p">)</span>
+
+<span class="c"># initialize dimensions</span>
+<span class="n">lat_dim</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createDimension</span><span class="p">(</span><span class="s">&#39;lon&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>     <span class="c"># longitude axis</span>
+<span class="n">lat_dim</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createDimension</span><span class="p">(</span><span class="s">&#39;lat&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>     <span class="c"># latitude axis</span>
+
+<span class="c"># Define two variables with the same names as dimensions,</span>
+<span class="c"># a conventional way to define &quot;coordinate variables&quot;.</span>
+<span class="n">lat</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createVariable</span><span class="p">(</span><span class="s">&#39;lat&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;lat&#39;</span><span class="p">,))</span>
+<span class="n">lat</span><span class="o">.</span><span class="n">units</span> <span class="o">=</span> <span class="s">&#39;degrees_north&#39;</span>
+<span class="n">lat</span><span class="o">.</span><span class="n">long_name</span> <span class="o">=</span> <span class="s">&#39;latitude&#39;</span>
+
+<span class="n">lon</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createVariable</span><span class="p">(</span><span class="s">&#39;lon&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;lon&#39;</span><span class="p">,))</span>
+<span class="n">lon</span><span class="o">.</span><span class="n">units</span> <span class="o">=</span> <span class="s">&#39;degrees_east&#39;</span>
+<span class="n">lon</span><span class="o">.</span><span class="n">long_name</span> <span class="o">=</span> <span class="s">&#39;longitude&#39;</span>
+
+<span class="c"># Temperature is a function of latitude and longitude</span>
+<span class="n">temp</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createVariable</span><span class="p">(</span><span class="s">&#39;temp&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;lat&#39;</span><span class="p">,</span><span class="s">&#39;lon&#39;</span><span class="p">))</span>
+<span class="n">temp</span><span class="o">.</span><span class="n">units</span> <span class="o">=</span> <span class="s">&#39;K&#39;</span>  <span class="c"># degrees Kelvin</span>
+<span class="n">temp</span><span class="o">.</span><span class="n">standard_name</span> <span class="o">=</span> <span class="s">&#39;air_temperature&#39;</span>  <span class="c"># this is a CF standard name</span>
+
+<span class="c"># Write latitudes, longitudes.</span>
+<span class="n">nlats</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">lat_dim</span><span class="p">)</span>
+<span class="n">nlons</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">lon_dim</span><span class="p">)</span>
+<span class="c"># Note: the &quot;:&quot; is necessary in these &quot;write&quot; statements</span>
+<span class="n">lat</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="mf">90.</span> <span class="o">+</span> <span class="p">(</span><span class="mf">180.</span><span class="o">/</span><span class="n">nlats</span><span class="p">)</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nlats</span><span class="p">)</span> <span class="c"># south pole to north pole</span>
+<span class="n">lon</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">180.</span><span class="o">/</span><span class="n">nlats</span><span class="p">)</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nlons</span><span class="p">)</span> <span class="c"># Greenwich meridian eastward</span>
+
+<span class="c"># populate temperature ndarray with reasonable earth temperatures</span>
+<span class="n">temp_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">280</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="mi">330</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">nlats</span><span class="p">,</span><span class="n">nlons</span><span class="p">))</span>
+<span class="n">temp</span><span class="p">[:,:]</span> <span class="o">=</span> <span class="n">temp_arr</span>
+
+<span class="c"># add attributes, all global; see CF standards</span>
+<span class="n">ncfile</span><span class="o">.</span><span class="n">title</span> <span class="o">=</span> <span class="s">&#39;My model data&#39;</span>
+<span class="n">ncfile</span><span class="o">.</span><span class="n">institution</span> <span class="o">=</span> <span class="s">&#39;Idaho State University&#39;</span>
+<span class="n">ncfile</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="s">&#39;Weather Stations in Reynolds Creek Watershed&#39;</span>
+<span class="n">ncfile</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="s">&#39;Existed since 1990, first time in public domain&#39;</span>
+
+<span class="c"># to save the file to disk, close the `ncfile` object</span>
+<span class="n">ncfile</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>To confirm that this worked, check the output of <code class="docutils literal"><span class="pre">ncdump</span></code> at the command line.</p>
+<div class="highlight-bash"><div class="highlight"><pre>ncdump new.nc
+</pre></div>
+</div>
+<p>You should see this, but with different random <code class="docutils literal"><span class="pre">data</span></code>:</p>
+<div class="highlight-cdl"><div class="highlight"><pre>netcdf new {
+dimensions:
+        lon = 3 ;
+        lat = 4 ;
+variables:
+        float lat(lat) ;
+                lat:units = &quot;degrees_north&quot; ;
+                lat:long_name = &quot;latitude&quot; ;
+        float lon(lon) ;
+                lon:units = &quot;degrees_east&quot; ;
+                lon:long_name = &quot;longitude&quot; ;
+        double temp(lat, lon) ;
+                temp:units = &quot;K&quot; ;
+                temp:standard_name = &quot;air_temperature&quot; ;
+
+// global attributes:
+                :title = &quot;My model data&quot; ;
+                :institution = &quot;Idaho State University&quot; ;
+                :source = &quot;Weather Stations in Reynolds Creek Watershed&quot; ;
+                :history = &quot;Existed since 1990, first time in public domain&quot; ;
+data:
+
+ lat = -90, -45, 0, 45 ;
+
+ lon = 0, 45, 90 ;
+
+ temp =
+  303.51644518952, 329.87896020043, 320.682946298552,
+  282.647054412333, 294.753235738639, 297.738184716573,
+  290.698305690645, 321.484896481591, 303.564564474415,
+  304.710075475009, 321.517749128517, 324.796144202603 ;
+}
+</pre></div>
+</div>
+</div>
+<div class="section" id="example-2-create-a-cf-formatted-netcdf-of-temperature-at-weather-stations">
+<h2>Example 2: Create a CF-formatted NetCDF of temperature at weather stations<a class="headerlink" href="#example-2-create-a-cf-formatted-netcdf-of-temperature-at-weather-stations" title="Permalink to this headline">¶</a></h2>
+<p>Consider the following situation: You have
+weather stations named <code class="docutils literal"><span class="pre">s1</span></code>, <code class="docutils literal"><span class="pre">s2</span></code>, and <code class="docutils literal"><span class="pre">s3</span></code> recording the temperature at
+three-dimensional points in space (x,y,z), which correspond to a longitude,
+latitude, and altitutde. Each station records temperature every fifteen
+minutes. The data has been processed so that the all four measurements taken
+within an hour are averaged, so our temperature is really <em>mean temperature</em>,
+but in most spots, we&#8217;ll just call it <code class="docutils literal"><span class="pre">temp</span></code> for short. Here is our tabular
+data:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="44%" />
+<col width="22%" />
+<col width="34%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">station name</th>
+<th class="head">time</th>
+<th class="head">temp</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>s1</td>
+<td>0</td>
+<td>301.4</td>
+</tr>
+<tr class="row-odd"><td>s2</td>
+<td>0</td>
+<td>298.0</td>
+</tr>
+<tr class="row-even"><td>s3</td>
+<td>0</td>
+<td>310.2</td>
+</tr>
+<tr class="row-odd"><td>s1</td>
+<td>1</td>
+<td>300.4</td>
+</tr>
+<tr class="row-even"><td>s2</td>
+<td>1</td>
+<td>293.0</td>
+</tr>
+<tr class="row-odd"><td>s3</td>
+<td>1</td>
+<td>306.2</td>
+</tr>
+<tr class="row-even"><td>s1</td>
+<td>2</td>
+<td>302.4</td>
+</tr>
+<tr class="row-odd"><td>s2</td>
+<td>2</td>
+<td>288.0</td>
+</tr>
+<tr class="row-even"><td>s3</td>
+<td>2</td>
+<td>308.1</td>
+</tr>
+</tbody>
+</table>
+<p>This time, our NetCDF dimensions are <code class="docutils literal"><span class="pre">station</span> <span class="pre">name</span></code> and <code class="docutils literal"><span class="pre">time</span></code> instead of
+<code class="docutils literal"><span class="pre">lat</span></code> and <code class="docutils literal"><span class="pre">lon</span></code>. Then in our CDL our dimension declaration is</p>
+<div class="highlight-cdl"><div class="highlight"><pre>dimensions:
+        time = UNLIMITED;
+        station = 3;
+        name_strlen = 2; // `s1` has two characters
+</pre></div>
+</div>
+<p>By declaring <code class="docutils literal"><span class="pre">time</span></code> as <code class="docutils literal"><span class="pre">UNLIMITED</span></code>, we allow for future measurements to be
+appended to the Dataset.</p>
+<p>We also have this tabular data about the stations:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="40%" />
+<col width="20%" />
+<col width="23%" />
+<col width="17%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">station name</th>
+<th class="head">lat</th>
+<th class="head">lon</th>
+<th class="head">alt</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>s1</td>
+<td>49.2</td>
+<td>-115.4</td>
+<td>1004</td>
+</tr>
+<tr class="row-odd"><td>s2</td>
+<td>49.4</td>
+<td>-114.0</td>
+<td>1025</td>
+</tr>
+<tr class="row-even"><td>s3</td>
+<td>50.1</td>
+<td>-116.2</td>
+<td>923</td>
+</tr>
+</tbody>
+</table>
+<p>So although lat, lon, and alt won&#8217;t be &#8220;dimensions&#8221;, they will be included as
+&#8220;variables&#8221;. We will consider them functions of &#8220;station name&#8221;, each represented
+in the CDL as</p>
+<div class="highlight-cdl"><div class="highlight"><pre>variables:
+        char station_name(station):
+                station_name:long_name = &quot;station name&quot;;
+                station_name:cf_role = &quot;timeseries_id&quot;;
+        float lat(station) ;
+                lat:long_name = &quot;station latitude&quot; ;
+                lat:standard_name = &quot;latitude&quot; ;
+                lat:units = &quot;degrees_north&quot; ;
+        float lon(station) ;
+                lon:long_name = &quot;station_longitude&quot; ;
+                lon:standard_name = &quot;longitude&quot; ;
+                lon:units = &quot;degrees_east&quot; ;
+        float alt(station) ;
+                alt:long_name = &quot;vertical distance above the surface&quot;;
+                alt:standard_name = &quot;height&quot;;
+                alt:units = &quot;m&quot;;
+                alt:positive = &quot;up&quot;;
+                alt:axis = &quot;Z&quot;;
+</pre></div>
+</div>
+<p>our temperature variable is a function of station and time:</p>
+<div class="highlight-cdl"><div class="highlight"><pre>variables:
+        ...
+        double time(time);
+                time:standard_name = &quot;time&quot;;
+                time:long_name = &quot;time of measurement&quot;
+                time:units = &quot;hours since 2005-10-01 00:00:00&quot;
+        float temp(time, station)
+                temp:standard_name = &quot;air_temperature&quot;;
+                temp:units = &quot;K&quot;;
+                temp:_FillValue = -999.9;
+</pre></div>
+</div>
+<div class="section" id="build-the-dataset-in-python">
+<h3>Build the dataset in python<a class="headerlink" href="#build-the-dataset-in-python" title="Permalink to this headline">¶</a></h3>
+<p>We can consult the examples in the CF Conventions Manual in <a class="reference external" href="http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aph.html">Appendix H</a> for guidance. We will essentially implement
+<a class="reference external" href="http://cfconventions.org/Data/cf-conventions/cf-conventions-1.7/build/aphs02.html">H2.1</a>
+but following the instructions from <a class="reference external" href="http://nbviewer.ipython.org/github/Unidata/unidata-python-workshop/blob/master/writing_netCDF.ipynb">the Write NetCDF ipynb</a>
+used before. Since we&#8217;re using the classic data model, our assignments are in
+the python procedure are in slightly different order.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="kn">as</span> <span class="nn">pd</span>
+
+<span class="n">ncfile</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="s">&#39;pygen_station_data.nc&#39;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s">&#39;w&#39;</span><span class="p">,</span> <span class="n">format</span><span class="o">=</span><span class="s">&#39;NETCDF4&#39;</span><span class="p">)</span>
+
+<span class="c"># `None` stands for UNLIMITED here</span>
+<span class="n">time_dim</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createDimension</span><span class="p">(</span><span class="s">&#39;time&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+<span class="n">station_dim</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createDimension</span><span class="p">(</span><span class="s">&#39;station&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+<span class="n">station</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createVariable</span><span class="p">(</span><span class="s">&#39;station&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;station&#39;</span><span class="p">,))</span>
+<span class="n">station</span><span class="o">.</span><span class="n">long_name</span> <span class="o">=</span> <span class="s">&quot;station name&quot;</span>
+<span class="n">station</span><span class="o">.</span><span class="n">cf_role</span> <span class="o">=</span> <span class="s">&quot;timeseries_id&quot;</span>
+
+<span class="n">time</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createVariable</span><span class="p">(</span><span class="s">&#39;time&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;time&#39;</span><span class="p">,))</span>
+<span class="n">time</span><span class="o">.</span><span class="n">units</span> <span class="o">=</span> <span class="s">&#39;hours since 2015-10-01 00:00:00&#39;</span>
+<span class="n">time</span><span class="o">.</span><span class="n">long_name</span> <span class="o">=</span> <span class="s">&#39;time&#39;</span>
+
+<span class="c"># lon, lat, altitude</span>
+<span class="n">lon</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createVariable</span><span class="p">(</span><span class="s">&#39;lon&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;station&#39;</span><span class="p">,))</span>
+<span class="n">lon</span><span class="o">.</span><span class="n">standard_name</span> <span class="o">=</span> <span class="s">&#39;longitude&#39;</span>
+<span class="n">lon</span><span class="o">.</span><span class="n">long_name</span> <span class="o">=</span> <span class="s">&#39;station longitude&#39;</span>
+<span class="n">lon</span><span class="o">.</span><span class="n">units</span> <span class="o">=</span> <span class="s">&#39;degrees_east&#39;</span>
+
+<span class="n">lat</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createVariable</span><span class="p">(</span><span class="s">&#39;lat&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;station&#39;</span><span class="p">,))</span>
+<span class="n">lat</span><span class="o">.</span><span class="n">standard_name</span> <span class="o">=</span> <span class="s">&#39;latitude&#39;</span>
+<span class="n">lat</span><span class="o">.</span><span class="n">long_name</span> <span class="o">=</span> <span class="s">&#39;latitude&#39;</span>
+<span class="n">lat</span><span class="o">.</span><span class="n">units</span> <span class="o">=</span> <span class="s">&#39;degrees_north&#39;</span>
+
+<span class="n">alt</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createVariable</span><span class="p">(</span><span class="s">&#39;alt&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;station&#39;</span><span class="p">,))</span>
+<span class="n">alt</span><span class="o">.</span><span class="n">standard_name</span> <span class="o">=</span> <span class="s">&#39;height&#39;</span>
+<span class="n">alt</span><span class="o">.</span><span class="n">long_name</span> <span class="o">=</span> <span class="s">&#39;vertical distance above the surface&#39;</span>
+<span class="n">alt</span><span class="o">.</span><span class="n">units</span> <span class="o">=</span> <span class="s">&#39;m&#39;</span>
+<span class="n">alt</span><span class="o">.</span><span class="n">positive</span> <span class="o">=</span> <span class="s">&#39;up&#39;</span>
+<span class="n">alt</span><span class="o">.</span><span class="n">axis</span> <span class="o">=</span> <span class="s">&#39;Z&#39;</span>
+
+<span class="c"># temperature</span>
+<span class="n">temp</span> <span class="o">=</span> <span class="n">ncfile</span><span class="o">.</span><span class="n">createVariable</span><span class="p">(</span><span class="s">&#39;temp&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;time&#39;</span><span class="p">,</span> <span class="s">&#39;station&#39;</span><span class="p">),</span>
+                             <span class="n">fill_value</span><span class="o">=-</span><span class="mf">999.99</span><span class="p">)</span>
+<span class="n">temp</span><span class="o">.</span><span class="n">units</span> <span class="o">=</span> <span class="s">&#39;K&#39;</span>
+<span class="n">temp</span><span class="o">.</span><span class="n">standard_name</span> <span class="o">=</span> <span class="s">&#39;air_temperature&#39;</span>
+</pre></div>
+</div>
+<p>We have our tabular data that has the station information in
+<a class="reference external" href="https://github.com/tri-state-epscor/vw-doc/blob/master/examples/station_info.csv">examples/station_info.csv</a> and the &#8220;weather&#8221; info (really just temperature)
+in <a class="reference external" href="https://github.com/tri-state-epscor/vw-doc/blob/master/examples/station_weather.csv">examples/station_weather.csv</a>. We&#8217;ll use <a class="reference external" href="http://pandas.pydata.org/pandas-docs/dev/io.html#io-read-csv-table">read_csv</a>
+from the <a class="reference external" href="http://pandas.pydata.org/">pandas</a> data analysis library. We&#8217;ll
+read those files in and use the data stored in them to finish creating our
+NetCDF version of the weather station data.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">import</span> <span class="nn">pandas</span> <span class="kn">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="n">station_info</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s">&#39;examples/station_info.csv&#39;</span><span class="p">)</span>
+<span class="n">station_weather</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s">&#39;examples/station_weather.csv&#39;</span><span class="p">)</span>
+
+<span class="n">station</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">station_info</span><span class="o">.</span><span class="n">station_name</span>
+<span class="n">time</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">station_info</span><span class="o">.</span><span class="n">time</span>
+
+<span class="n">lon</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">station_info</span><span class="o">.</span><span class="n">lon</span>
+<span class="n">lat</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">station_info</span><span class="o">.</span><span class="n">lat</span>
+<span class="n">alt</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">station_info</span><span class="o">.</span><span class="n">alt</span>
+
+<span class="n">station_weather</span><span class="o">.</span><span class="n">sort</span><span class="p">([</span><span class="s">&#39;time&#39;</span><span class="p">,</span> <span class="s">&#39;station_name&#39;</span><span class="p">],</span> <span class="n">inplace</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+
+<span class="n">temp_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">station_weather</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">time</span><span class="p">),</span><span class="nb">len</span><span class="p">(</span><span class="n">station</span><span class="p">)))</span>
+
+<span class="n">temp</span><span class="p">[:,:]</span> <span class="o">=</span> <span class="n">temp_array</span>
+
+<span class="n">ncfile</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The two blocks of python code in this example can be found in
+<a class="reference external" href="https://github.com/tri-state-epscor/vw-doc/blob/master/examples/make_station_data.py">example/make_station_data.py</a>. Run that example from the <code class="docutils literal"><span class="pre">examples</span></code>
+directory</p>
+<div class="highlight-bash"><div class="highlight"><pre><span class="nb">cd </span>examples/ <span class="o">&amp;&amp;</span> python make_station_data.py
+</pre></div>
+</div>
+<p>which will create a new file, <code class="docutils literal"><span class="pre">pygen_station_data.nc</span></code>.</p>
+</div>
+<div class="section" id="confirm-success">
+<h3>Confirm success<a class="headerlink" href="#confirm-success" title="Permalink to this headline">¶</a></h3>
+<p>If you haven&#8217;t already,
+get the NetCDF Operators package, <a class="reference external" href="http://nco.sourceforge.net/">NCO</a>. It has
+some nice tools, one of which will help us confirm that we have loaded the
+NetCDF <code class="docutils literal"><span class="pre">temp</span></code> variable correctly. Using the <a class="reference external" href="http://nco.sourceforge.net/nco.html#ncks-netCDF-Kitchen-Sink">ncks</a> utility (NetCDF
+Kitchen Sink, you&#8217;ll see why) we print a lot of info about the file. The
+important part comes near the bottom</p>
+<div class="highlight-bash"><div class="highlight"><pre>ncks pygen_station_data.py
+</pre></div>
+</div>
+<div class="highlight-cdl"><div class="highlight"><pre>...
+time[0]=0 station[0]=s1 temp[0]=301.4 K
+time[0]=0 station[1]=s2 temp[1]=298 K
+time[0]=0 station[2]=s3 temp[2]=310.2 K
+time[1]=1 station[0]=s1 temp[3]=300.4 K
+time[1]=1 station[1]=s2 temp[4]=293 K
+time[1]=1 station[2]=s3 temp[5]=306.2 K
+time[2]=2 station[0]=s1 temp[6]=302.4 K
+time[2]=2 station[1]=s2 temp[7]=288 K
+time[2]=2 station[2]=s3 temp[8]=308.1 K
+...
+</pre></div>
+</div>
+<p>We know we&#8217;re good because this matches <code class="docutils literal"><span class="pre">weather_stations.csv</span></code>.</p>
+</div>
+</div>
+<div class="section" id="common-data-form-description-language-cdl">
+<h2>Common data form Description Language (CDL)<a class="headerlink" href="#common-data-form-description-language-cdl" title="Permalink to this headline">¶</a></h2>
+<p>The Common data format Description Language is a plain-text, fail-safe way to
+create NetCDF datasets. Once you write out the description of the data, you
+can run <code class="docutils literal"><span class="pre">ncgen</span></code> (<a class="reference external" href="https://www.unidata.ucar.edu/software/netcdf/docs/netcdf/ncgen.html#ncgen">extended documentation</a>
+<a class="reference external" href="http://www.unidata.ucar.edu/software/netcdf/old_docs/docs_3_6_0/ncgen-man-1.html">manpage documentation</a>)
+to create a NetCDF file from a CDL file. This will check your syntax and
+initialize a file for you. Here are a few resources for CDL:</p>
+<ul class="simple">
+<li><a class="reference external" href="https://www.unidata.ucar.edu/software/netcdf/workshops/2010/utilities/CDL.html">NetCDF Workshop 2010 page on CDL</a></li>
+<li><a class="reference external" href="https://www.unidata.ucar.edu/software/netcdf/docs/netcdf/CDL-Syntax.html">CDL Syntax</a></li>
+</ul>
+<p>Here&#8217;s how we could do the first example using just CDL files and <code class="docutils literal"><span class="pre">ncgen</span></code>.
+There is a CDL file in the <a class="reference external" href="https://github.com/tri-state-epscor/vw-doc/tree/master/examples">example</a>
+directory called <code class="docutils literal"><span class="pre">weather_stations.cdl</span></code> that defines weather station data
+from Example 2.  To build an empty NetCDF file we could insert data into, call</p>
+<div class="highlight-bash"><div class="highlight"><pre>ncgen -o weather_stations.nc weather_stations.cdl
+</pre></div>
+</div>
+<p>and we&#8217;d have a new NetCDF file <code class="docutils literal"><span class="pre">weather_stations.nc</span></code> with an all-empty data
+section and identical dimension and variable sections.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/wc_wave_triangles.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">CF-NetCDF as reference data model for VW</a><ul>
+<li><a class="reference internal" href="#intro">Intro</a></li>
+<li><a class="reference internal" href="#resources-for-understanding-netcdf-python">Resources for Understanding NetCDF(-python)</a></li>
+<li><a class="reference internal" href="#example-1-create-a-netcdf-of-temperature-on-a-grid">Example 1: Create a NetCDF of temperature on a grid</a></li>
+<li><a class="reference internal" href="#example-2-create-a-cf-formatted-netcdf-of-temperature-at-weather-stations">Example 2: Create a CF-formatted NetCDF of temperature at weather stations</a><ul>
+<li><a class="reference internal" href="#build-the-dataset-in-python">Build the dataset in python</a></li>
+<li><a class="reference internal" href="#confirm-success">Confirm success</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#common-data-form-description-language-cdl">Common data form Description Language (CDL)</a></li>
+</ul>
+</li>
+</ul>
+
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/netcdf.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Tri-State EPSCoR: WC-WAVE.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.4</a>
+      
+      |
+      <a href="_sources/netcdf.txt"
+          rel="nofollow">Page source</a></li>
+    </div>
+
+    
+
+    
+  </body>
+</html>
