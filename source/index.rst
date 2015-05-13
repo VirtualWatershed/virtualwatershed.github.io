@@ -47,10 +47,10 @@ If you are looking for API documentation, see below
     isnobal
 
 
-Connect to and query the virtual watershed data engine
-------------------------------------------------------
+Connect to and query the VWDE
+-----------------------------
 
-First, the pre-requisites are
+First, the pre-requisites are:
 
 1. You've followed the installation instructions at the `wcwave_adaptors GitHub page <https://github.com/tri-state-epscor/wcwave_adaptors>`_.
 2. You've added the  ``wcwave_adaptors`` to your path, either through ``sys.path.append('~/path/to/adaptors')`` or through the ``$PYTHONPATH`` environment variable.

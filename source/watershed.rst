@@ -4,20 +4,19 @@
 Virtual Watershed Adaptor
 =========================
 
-The ``adaptors.watershed`` module is designed as a general interface for any 
-model or modeling framework, such as ISNOBAL or CSDMS. 
+These tools help the user connect to the Virtual Watershed Data API. For more
+information, see the Data API docs at http://vwp-dev.unm.edu/docs/index.html.
 
 VWClient: User Interface to the Virtual Watershed
 `````````````````````````````````````````````````
 
 The ``VWClient`` performs several routine virtual watershed functions. The
-first, performed in the constructor, is to verify that the user/password
-is an authorized account. There is a ``search`` method with options 
-currently limited but easily scalable. ``fetch_records`` will fetch all 
-JSON Watershed metadata records available for a given ``modelRunUUID``.
-There are obvious ``download`` and ``upload`` functions. Finally there is
-an ``insert_metadata`` function that pushes JSON watershed metadata to the
-database.
+first, performed in the constructor, is for authentication. 
+There two ``search`` methods, ``dataset_search`` and ``modelrun_search``. 
+There are obvious ``download`` and ``upload`` functions. To create a model run,
+this class provides the ``initialize_modelrun`` method.
+An ``insert_metadata`` function pushes JSON watershed metadata to the
+database. For deleteing model runs, use ``delete_modelrun``.
 
 .. autoclass:: wcwave_adaptors.wcwave_adaptors.watershed.VWClient
     :members:
@@ -36,30 +35,31 @@ Assuming you have properly filled out your ``default.conf`` file with the
 IP address of the watershed and your login information, you can do the 
 following.
 
->>> import adaptors.watershed as vw_adaptor
->>> vwClient = vw_adaptor.default_vw_client()
->>> modelRunUUID = "373ae181-a0b2-4998-ba32-e27da190f6dd"
->>> records = vwClient.search(model_run_uuid=modelRunUUID)
->>> records.total
-8759
->>> records.fetchedTotal
-15
->>> records.records[0]
-{u'categories': [{u'location': u'Dry Creek',
-   u'modelname': u'isnobal',
-      u'state': u'Idaho'}],
-       u'description': u'Test ISNOBAL Arizona input binary file Hour 0000',
-        u'downloads': [{u'bin': u'http://vwp-dev.unm.edu/apps/my_app/datasets/7ac44fa7-6515-422e-a3a9-e9aadf4924bb/in.0000.original.bin'}], ...
+.. code-block:: python
+
+    from wcwave_adaptors import default_vw_client
+
+    vw_client = default_vw_client()
+
+    # get the first model_run_uuid returned from the model run search
+    model_run_uuid = vw_client.modelrun_search().records[0]['Model Run UUID']
+
+    # get a QueryResult that contains the total records, subtotal returned
+    # with the query, and a list of the records themselves
+    result = vwClient.dataset_search(model_run_uuid=modelRunUUID)
+    total_records_available = result.total
+    records_returned_this_query = result.subtotal
+    records_themselves = result.records
+    assert len(records_themselves) == records_returned_this_query
 
 The default number of results fetched (enforced by the watershed) is 15, so to 
 get 30, use the ``limit`` keyword, for example
 
->>> thirty = vwClient.fetch_records(modelRunUUID, limit=30)
+.. code-block:: python
 
-If you're using the pincushion watershed IP address, you should get the exact
-same number of records and get the same output.
+    thirty = vwClient.dataset_search(model_run_uuid=model_run_uuid, limit=30)
 
-When using the ``VWClient.search`` function, you can specify any of the 
+When using the ``VWClient.dataset_search`` function, you can specify any of the 
 key/value pairs specified in the `virtual watershed documentation 
 <http://vwp-dev.unm.edu/docs/stable/search.html#search-objects>`_.
 
@@ -81,15 +81,6 @@ metadata. The templates used to implement these functions are stored in the
 
 .. autofunction:: wcwave_adaptors.wcwave_adaptors.watershed.make_fgdc_metadata
 
-Configuration File Getter
-`````````````````````````
-
-The configuration files are loaded with a short conveneince function, 
-``get_config``. Loading of this file was kept separate from the metadata making
-functions because it would be wasteful to continually reload the config file.
-Instead, we force the user to pass in the configuration file. It may be 
-called with no arguments if called from the root folder. Otherwise the 
-configuration file must be specified. See below for an example.
 
 Example using metadata builders and the VW Client
 `````````````````````````````````````````````````
@@ -109,26 +100,71 @@ Get a VW Client connection (will soon be done during initialization)
 Initialize a new model run
 --------------------------
 
->>> description = "New model run for doing SCIENCE!!!"
->>> new_uuid = vw_client.initialize_model_run(description)
+.. code-block:: python
+
+    new_uuid = vw_client.initialize_model_run(model_run_name='iSNOBAL for Water
+        Year 2010', description='input and output files for observed data for
+        water year 2010', researcher_name='Matt Turner',
+        keywords='isnobal,idaho')
+
 
 Upload File
 -----------
 
->>> dataFile = "src/test/data/in.0001"
->>> vw_client.upload(new_uuid, "src/test/data/in.0001")
+.. code-block:: python
+
+    data_file = "src/test/data/in.0001"
+    vw_client.upload(new_uuid, data_file)
+
 
 Build metadata
 --------------
 
->>> fgdcXML = make_fgdc_metadata(dataFile, config, new_uuid=new_uuid)
->>> watershedJSON = make_watershed_metadata(dataFile, config, new_uuid, new_uuid, "inputs", "Description of the data", model_vars="R_n,H,L_v_E,G,M,delta_Q", fgdcMetadata=fgdcXML) 
+.. code-block:: python
+
+    start_datetime = '2010-01-01 01:00:00'
+    end_datetime = '2010-01-01 02:00:00'
+
+    upl_res = vw_client.upload(new_uuid, input_file)
+    assert upl_res.status_code == 200, "Error on upload!"
+
+    # now description refers to an individual metadata record
+    description = 'isnobal I_lw geotiff #2'
+
+    fgdc_metadata = make_fgdc_metadata(data_file, parent_uuid,
+        start_datetime=start_datetime, end_datetime=end_datetime,
+        model=model_name)
+
+    watershed_metadata = metadata_from_file(data_file, parent_uuid,
+        new_uuid, description, watershed_name, state,
+        start_datetime=start_datetime, end_datetime=end_datetime,
+        model_name=model_name, fgdc_metadata=fgdc_metadata)
 
 Insert Metadata
 ---------------
 
->>> vw_client.insert_metadata(watershedJSON)
+.. code-block:: python
 
+    vw_client.insert_metadata(watershed_metadata)
+
+Make Watershed Metadata
+```````````````````````
+
+We could have used the ``make_watershed_metadata`` function, but
+``metadata_from_file`` helps us out, especially when inserting geotiffs and
+iSNOBAL binaries, which it knows about and automatically creates appropriate
+metadata in these cases. 
+
+.. autofunction:: wcwave_adaptors.wcwave_adaptors.watershed.metadata_from_file
+
+
+Upsert
+-------
+
+.. warning::
+
+    This works, but may soon be deprecated and will likely not be supported any
+    more.
 I wrote out all of the previous steps to show what is possible with the 
 watershed. The function that puts this all together, though, is the ``upsert``
 function, which allows the user to upload and insert either a single file or a
@@ -136,13 +172,6 @@ whole directory to the virtual watershed
 
 .. _upsert-ref:
 
-Upsert
--------
-
 .. autofunction:: wcwave_adaptors.wcwave_adaptors.watershed.upsert
 
 
-Make Watershed Metadata
-```````````````````````
-
-.. autofunction:: wcwave_adaptors.wcwave_adaptors.watershed.metadata_from_file
