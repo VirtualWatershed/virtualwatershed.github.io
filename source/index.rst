@@ -149,7 +149,7 @@ Create a new model run
 
     # create a new model run
     new_mr_uuid = \
-        vw_client.initialize_model_run(
+        vw_client.initialize_modelrun(
             model_run_name='example model run for vw-doc', 
             description='will be inserting only one file, in.0000, a multi-banded iSNOBAL input grid file', 
             researcher_name='Matt Turner', keywords='isnobal,example,idaho')
