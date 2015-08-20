@@ -44,7 +44,7 @@ If you are looking for API documentation, see below
     :maxdepth: 1
 
     watershed
-    isnobal
+    isnobal_netcdf
 
 
 Connect to and query the VWDE
@@ -151,10 +151,11 @@ Create a new model run
     new_mr_uuid = \
         vw_client.initialize_modelrun(
             model_run_name='example model run for vw-doc', 
-            description='will be inserting only one file, in.0000, a multi-banded iSNOBAL input grid file', 
-            researcher_name='Matt Turner', keywords='isnobal,example,idaho')
+            description='a multi-banded iSNOBAL input grid file', 
+            researcher_name='Matt Turner', 
+            keywords='isnobal,example,idaho')
 
-    print new_mr_uuid  # something like u'0a3e8c1f-c09a-46a3-8acb-6816ebd25e69'
+    print new_mr_uuid  #  ex. u'0a3e8c1f-c09a-46a3-8acb-6816ebd25e69'
 
 
 Now we could use another search, the model run search, to search for datasets 
