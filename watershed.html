@@ -25,7 +25,7 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="VW Python API" href="index.html" />
-    <link rel="next" title="Python ISNOBAL Interface" href="isnobal.html" />
+    <link rel="next" title="(iSNOBAL) modeling with NetCDF" href="isnobal_netcdf.html" />
     <link rel="prev" title="Python API for the Virtual Watershed" href="index.html" />
    
   
@@ -40,7 +40,7 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="isnobal.html" title="Python ISNOBAL Interface"
+          <a href="isnobal_netcdf.html" title="(iSNOBAL) modeling with NetCDF"
              accesskey="N">next</a> |</li>
         <li class="right" >
           <a href="index.html" title="Python API for the Virtual Watershed"
@@ -179,7 +179,7 @@ the response.</td>
 
 <dl class="method">
 <dt id="wcwave_adaptors.wcwave_adaptors.watershed.VWClient.modelrun_search">
-<code class="descname">modelrun_search</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#VWClient.modelrun_search"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.modelrun_search" title="Permalink to this definition">¶</a></dt>
+<code class="descname">modelrun_search</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#VWClient.modelrun_search"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.modelrun_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get a list of model runs in the database. Currently no actual &#8220;search&#8221;
 (see, e.g. dataset_search) is available from the Virtual Watershed
 Data API.</p>
@@ -190,6 +190,24 @@ Data API.</p>
 <tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">(QueryResult) A query result, containing total records matching,
 the number of results returned (subtotal), and the records
 themselves, which is a list of dict.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="wcwave_adaptors.wcwave_adaptors.watershed.VWClient.swift_upload">
+<code class="descname">swift_upload</code><span class="sig-paren">(</span><em>model_run_uuid</em>, <em>data_file_path</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#VWClient.swift_upload"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.VWClient.swift_upload" title="Permalink to this definition">¶</a></dt>
+<dd><p>Use the Swift client from openstack to upload data.
+(<a class="reference external" href="http://docs.openstack.org/cli-reference/content/swiftclient_commands.html">http://docs.openstack.org/cli-reference/content/swiftclient_commands.html</a>)
+Seems to outperform &#8216;native&#8217; watershed uploads via HTTP.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">None</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Raises:</th><td class="field-body"><strong>requests.HTTPError if the file cannot be successfully uploaded</strong> &#8211;</td>
 </tr>
 </tbody>
 </table>
@@ -219,7 +237,7 @@ if the file cannot be successfully uploaded</td>
 <code class="docutils literal"><span class="pre">default.conf</span></code> and establish a connection with</p>
 <dl class="function">
 <dt id="wcwave_adaptors.wcwave_adaptors.watershed.default_vw_client">
-<code class="descclassname">wcwave_adaptors.wcwave_adaptors.watershed.</code><code class="descname">default_vw_client</code><span class="sig-paren">(</span><em>config_file='default.conf'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#default_vw_client"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.default_vw_client" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">wcwave_adaptors.wcwave_adaptors.watershed.</code><code class="descname">default_vw_client</code><span class="sig-paren">(</span><em>config_file=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#default_vw_client"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.default_vw_client" title="Permalink to this definition">¶</a></dt>
 <dd><p>Use the credentials in config_file to initialize a new VWClient instance</p>
 <p>Returns: VWClient connected to the ip address given in config_file</p>
 </dd></dl>
@@ -295,7 +313,7 @@ metadata. The templates used to implement these functions are stored in the
 <code class="docutils literal"><span class="pre">resources/</span></code> directory.</p>
 <dl class="function">
 <dt id="wcwave_adaptors.wcwave_adaptors.watershed.make_watershed_metadata">
-<code class="descclassname">wcwave_adaptors.wcwave_adaptors.watershed.</code><code class="descname">make_watershed_metadata</code><span class="sig-paren">(</span><em>file_name</em>, <em>config</em>, <em>parent_model_run_uuid</em>, <em>model_run_uuid</em>, <em>model_set</em>, <em>watershed_name</em>, <em>state</em>, <em>fgdc_metadata=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#make_watershed_metadata"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.make_watershed_metadata" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">wcwave_adaptors.wcwave_adaptors.watershed.</code><code class="descname">make_watershed_metadata</code><span class="sig-paren">(</span><em>file_name</em>, <em>config</em>, <em>parent_model_run_uuid</em>, <em>model_run_uuid</em>, <em>model_set</em>, <em>watershed_name</em>, <em>state</em>, <em>fgdc_metadata=None</em>, <em>file_ext=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#make_watershed_metadata"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.make_watershed_metadata" title="Permalink to this definition">¶</a></dt>
 <dd><p>For a single <cite>file_name</cite>, write the corresponding Virtual Watershed JSON
 metadata.</p>
 <dl class="docutils">
@@ -304,7 +322,7 @@ metadata.</p>
 <p>epsg: current EPSG code</p>
 <p>taxonomy: likely &#8216;file&#8217;; representation of the data</p>
 <p>model_vars: variable(s) represented in the data</p>
-<p>model_set: &#8216;inputs&#8217; or &#8216;outputs&#8217;; AssertionError if not</p>
+<p>model_set: &#8216;inputs&#8217;, &#8216;outputs&#8217;, or &#8216;reference&#8217;; AssertionError if not</p>
 <p>model_set_type: e.g., &#8216;binary&#8217;, &#8216;csv&#8217;, &#8216;tif&#8217;, etc.</p>
 <p>model_set_taxonomy: &#8216;grid&#8217;, &#8216;vector&#8217;, etc.</p>
 <p>west_bound: westernmost longitude of bounding box</p>
@@ -319,7 +337,7 @@ metadata.</p>
 <p>model_name: Name of model, if applicaple; e.g. &#8216;iSNOBAL&#8217;, &#8216;PRMS&#8217;</p>
 <p>mimetype: defaults to application/octet-stream</p>
 <dl class="last docutils">
-<dt>ext: extension to be associated with the dataset; make_watershed_metadata</dt>
+<dt>file_ext: extension to be associated with the dataset; make_watershed_metadata</dt>
 <dd>will take the extension of file_name if not given explicitly</dd>
 <dt>fgdc_metadata: FGDC md probably created by make_fgdc_metadata; if not</dt>
 <dd>given, a default version is created (see source for details)</dd>
@@ -436,7 +454,7 @@ iSNOBAL binaries, which it knows about and automatically creates appropriate
 metadata in these cases.</p>
 <dl class="function">
 <dt id="wcwave_adaptors.wcwave_adaptors.watershed.metadata_from_file">
-<code class="descclassname">wcwave_adaptors.wcwave_adaptors.watershed.</code><code class="descname">metadata_from_file</code><span class="sig-paren">(</span><em>input_file</em>, <em>parent_model_run_uuid</em>, <em>model_run_uuid</em>, <em>description</em>, <em>watershed_name</em>, <em>state</em>, <em>start_datetime=None</em>, <em>end_datetime=None</em>, <em>model_name=None</em>, <em>fgdc_metadata=None</em>, <em>model_set_type=None</em>, <em>model_set_taxonomy=None</em>, <em>water_year_start=2010</em>, <em>water_year_end=2011</em>, <em>config_file=None</em>, <em>dt=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#metadata_from_file"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.metadata_from_file" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">wcwave_adaptors.wcwave_adaptors.watershed.</code><code class="descname">metadata_from_file</code><span class="sig-paren">(</span><em>input_file</em>, <em>parent_model_run_uuid</em>, <em>model_run_uuid</em>, <em>description</em>, <em>watershed_name</em>, <em>state</em>, <em>start_datetime=None</em>, <em>end_datetime=None</em>, <em>model_name=None</em>, <em>fgdc_metadata=None</em>, <em>model_set_type=None</em>, <em>model_set_taxonomy=None</em>, <em>water_year_start=2010</em>, <em>water_year_end=2011</em>, <em>config_file=None</em>, <em>dt=None</em>, <em>model_set=None</em>, <em>model_vars=None</em>, <em>file_ext=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#metadata_from_file"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.metadata_from_file" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generate metadata for input_file.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -464,7 +482,7 @@ function, which allows the user to upload and insert either a single file or a
 whole directory to the virtual watershed</p>
 <span class="target" id="upsert-ref"></span><dl class="function">
 <dt id="wcwave_adaptors.wcwave_adaptors.watershed.upsert">
-<code class="descclassname">wcwave_adaptors.wcwave_adaptors.watershed.</code><code class="descname">upsert</code><span class="sig-paren">(</span><em>input_path</em>, <em>watershed_name</em>, <em>state</em>, <em>model_run_name=None</em>, <em>description=None</em>, <em>keywords=None</em>, <em>parent_model_run_uuid=None</em>, <em>model_run_uuid=None</em>, <em>model_name=None</em>, <em>model_set_type=None</em>, <em>ext=None</em>, <em>config_file=None</em>, <em>dt=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#upsert"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.upsert" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">wcwave_adaptors.wcwave_adaptors.watershed.</code><code class="descname">upsert</code><span class="sig-paren">(</span><em>input_path</em>, <em>watershed_name</em>, <em>state</em>, <em>model_run_name=None</em>, <em>description=None</em>, <em>keywords=None</em>, <em>parent_model_run_uuid=None</em>, <em>model_run_uuid=None</em>, <em>model_name=None</em>, <em>model_set_type=None</em>, <em>file_ext=None</em>, <em>config_file=None</em>, <em>dt=None</em>, <em>taxonomy='geoimage'</em>, <em>model_set_taxonomy='grid'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/watershed.html#upsert"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.watershed.upsert" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="docutils">
 <dt>Upload the file or files located at input_path, which could be a</dt>
 <dd>directory. This function also creates and inserts metadata records for
@@ -525,8 +543,8 @@ every file as required by the virtual watershed.</dd>
   <p class="topless"><a href="index.html"
                         title="previous chapter">Python API for the Virtual Watershed</a></p>
   <h4>Next topic</h4>
-  <p class="topless"><a href="isnobal.html"
-                        title="next chapter">Python ISNOBAL Interface</a></p>
+  <p class="topless"><a href="isnobal_netcdf.html"
+                        title="next chapter">(iSNOBAL) modeling with NetCDF</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">

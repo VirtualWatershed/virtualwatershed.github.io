@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>iSNOBAL modeling with NetCDF &mdash; VW Python API</title>
+    <title>(iSNOBAL) modeling with NetCDF &mdash; VW Python API</title>
     
     <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -25,6 +25,7 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="VW Python API" href="index.html" />
+    <link rel="prev" title="Virtual Watershed Adaptor" href="watershed.html" />
    
   
   <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
@@ -37,6 +38,9 @@
         <li class="right" style="margin-right: 10px">
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="watershed.html" title="Virtual Watershed Adaptor"
+             accesskey="P">previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">VW Python API</a> &raquo;</li> 
       </ul>
     </div>  
@@ -47,34 +51,100 @@
           <div class="body" role="main">
             
   <div class="section" id="isnobal-modeling-with-netcdf">
-<h1>iSNOBAL modeling with NetCDF<a class="headerlink" href="#isnobal-modeling-with-netcdf" title="Permalink to this headline">¶</a></h1>
-<p>iSNOBAL is certainly a worthy physical model for representing snow melt-
-water input systems. However, it is due for a modernization effort. Since
-iSNOBAL is so popular with researchers in the WC-WAVE project, we made this
-modernization a priority.</p>
-<p>Here we describe how we transform iSNOBAL-specific IPW data in a series of many,
-typically thousands, of files into a single NetCDF file. By doing so we may more
-easily create and track iSNOBAL input data.</p>
-<p>To generate the lat and lon, which we need to conform with CF convention,
-we need to convert UTM grid location to latitude and longitude. We can do this
-using the <a class="reference external" href="https://pypi.python.org/pypi/utm">utm</a> tool written in Python.
-We will generate an array on the
-fly using a python list comprehension and some information about the grid, which
-we gleaned from the IPW file&#8217;s header.</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<h1>(iSNOBAL) modeling with NetCDF<a class="headerlink" href="#isnobal-modeling-with-netcdf" title="Permalink to this headline">¶</a></h1>
+<p>As we integrate more models into the virtual watershed, it&#8217;s good to look at the
+one model that has been pretty well integrated with virtual watershed
+technologies: iSNOBAL. In order to run this you&#8217;ll have to have the
+IPW library, which can either be cloned from GitHub for Linux:
+<a class="reference external" href="https://github.com/tri-state-epscor/water-ipw">https://github.com/tri-state-epscor/water-ipw</a> (please get in touch if you can&#8217;t
+access the page, it&#8217;s private) or downloaded here with precompiled binaries for
+OS X: <a class="reference download internal" href="_downloads/ipw-2.1.0.tar.gz"><code class="xref download docutils literal"><span class="pre">ipw-2.1.0.tar.gz</span></code></a>.</p>
+<p>I&#8217;ve created a model run and dataset on the virtual watershed for this tutorial
+by running the following commands:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">wcwave_adaptors</span> <span class="kn">import</span> <span class="p">(</span><span class="n">default_vw_connection</span><span class="p">,</span> <span class="n">isnobal</span><span class="p">,</span>
+    <span class="n">make_fgdc_metadata</span><span class="p">,</span> <span class="n">metadata_from_file</span><span class="p">)</span>
 
-<span class="n">lon_arr</span><span class="p">,</span> <span class="n">lat_arr</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">,</span>
-               <span class="p">[</span><span class="n">utm</span><span class="o">.</span><span class="n">utmToLatlon</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="s">&#39;U&#39;</span><span class="p">)[:</span><span class="mi">2</span><span class="p">]</span>
-                <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">[</span><span class="n">bline</span> <span class="o">+</span> <span class="n">dline</span><span class="o">*</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nline</span><span class="p">)]</span>
-                    <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="p">[</span><span class="n">bsamp</span> <span class="o">+</span> <span class="n">dsamp</span><span class="o">*</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nsamp</span><span class="p">)]</span>
-               <span class="p">])</span>
+<span class="n">vwc</span> <span class="o">=</span> <span class="n">default_vw_connection</span><span class="p">()</span>
+<span class="n">modelrun_uu</span> <span class="o">=</span> <span class="n">vwc</span><span class="o">.</span><span class="n">initialize_modelrun</span><span class="p">(</span>
+    <span class="n">model_run_name</span><span class="o">=</span><span class="s">&#39;Two weeks of input for iSNOBAL tutorial&#39;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s">&#39;tutorial input data&#39;</span><span class="p">,</span>
+    <span class="n">researcher_name</span><span class="o">=</span><span class="s">&#39;Matt Turner&#39;</span><span class="p">,</span>
+    <span class="n">keywords</span><span class="o">=</span><span class="s">&#39;isnobal, netcdf&#39;</span><span class="p">)</span>
+
+<span class="n">file_path</span> <span class="o">=</span> <span class="s">&#39;twoweek_inputs_with_zlib.nc&#39;</span>
+
+<span class="c"># can check that upl_res.status_code == 200 and upl_res.text == &#39;OK&#39;</span>
+<span class="n">upl_res</span> <span class="o">=</span> <span class="n">vwc</span><span class="o">.</span><span class="n">upload</span><span class="p">(</span><span class="n">modelrun_uu</span><span class="p">,</span> <span class="n">file_path</span><span class="p">)</span>
+<span class="c"># set required metadata fields for the FGDC &quot;science&quot; metadata</span>
+<span class="n">config</span> <span class="o">=</span> <span class="bp">None</span>  <span class="c"># sets config to be loaded from default.conf</span>
+<span class="n">start_datetime</span> <span class="o">=</span> <span class="s">&#39;2010-01-01 00:00:00&#39;</span>
+<span class="n">end_datetime</span> <span class="o">=</span> <span class="s">&#39;2010-01-08 00:00:00&#39;</span>
+<span class="n">model_name</span> <span class="o">=</span> <span class="s">&#39;isnobal&#39;</span>
+
+<span class="n">fgdc_metadata</span> <span class="o">=</span> <span class="n">make_fgdc_metadata</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">modelrun_uu</span><span class="p">,</span>
+                                   <span class="n">start_datetime</span><span class="p">,</span> <span class="n">end_datetime</span><span class="p">,</span>
+                                   <span class="n">model_name</span><span class="o">=</span><span class="s">&#39;isnobal&#39;</span><span class="p">)</span>
+<span class="c"># data from ftp://icewater.boisestate.edu/boisefront-products/other/projects/Kormos_iSNOBAL/</span>
+<span class="n">watershed_name</span> <span class="o">=</span> <span class="s">&#39;Dry Creek&#39;</span>
+<span class="n">state</span> <span class="o">=</span> <span class="s">&#39;Idaho&#39;</span>
+<span class="n">desc</span> <span class="o">=</span> <span class="s">&#39;netCDF with roughly two weeks (400 hours) of input data ready for an isnobal run&#39;</span>
+
+<span class="n">watershed_md</span> <span class="o">=</span> \
+    <span class="n">metadata_from_file</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="n">modelrun_uu</span><span class="p">,</span> <span class="n">modelrun_uu</span><span class="p">,</span> <span class="n">desc</span><span class="p">,</span>
+        <span class="n">watershed_name</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">start_datetime</span><span class="o">=</span><span class="n">start_datetime</span><span class="p">,</span>
+        <span class="n">end_datetime</span><span class="o">=</span><span class="n">end_datetime</span><span class="p">,</span> <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
+        <span class="n">fgdc_metadata</span><span class="o">=</span><span class="n">fgdc_metadata</span><span class="p">,</span> <span class="n">model_set</span><span class="o">=</span><span class="s">&#39;inputs&#39;</span><span class="p">,</span>
+        <span class="n">taxonomy</span><span class="o">=</span><span class="s">&#39;geoimage&#39;</span><span class="p">,</span> <span class="n">model_set_taxonomy</span><span class="o">=</span><span class="s">&#39;grid&#39;</span><span class="p">)</span>
+
+<span class="n">insert_res</span> <span class="o">=</span> <span class="n">vwc</span><span class="o">.</span><span class="n">insert_metadata</span><span class="p">(</span><span class="n">watershed_md</span><span class="p">)</span>
+
+<span class="n">file_uu</span> <span class="o">=</span> <span class="n">insert_res</span><span class="o">.</span><span class="n">text</span>
 </pre></div>
 </div>
-<p>then use the arrays to populate lat and lon variables</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="n">lat</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">lat_arr</span>
-<span class="n">lon</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">lon_arr</span>
+<p>Now we&#8217;re going to show how to download that data and run iSNOBAL. We&#8217;ll need
+file_uu from the steps above.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">import</span> <span class="nn">netCDF4</span>
+
+<span class="c"># use the file_uu from before to find the dataset record we need</span>
+<span class="n">input_records</span> <span class="o">=</span> <span class="n">vwc</span><span class="o">.</span><span class="n">dataset_search</span><span class="p">(</span><span class="n">uuid</span><span class="o">=</span><span class="n">uu</span><span class="p">)</span><span class="o">.</span><span class="n">records</span>
+
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">input_records</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&quot;there should be only one unique record&quot;</span>
+
+<span class="n">input_record</span> <span class="o">=</span> <span class="n">input_records</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+
+<span class="n">dl_url</span> <span class="o">=</span> <span class="n">input_record</span><span class="p">[</span><span class="s">&#39;downloads&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s">&#39;nc&#39;</span><span class="p">]</span>
+
+<span class="n">input_path</span> <span class="o">=</span> <span class="s">&#39;two-weeks-input.nc&#39;</span>
+<span class="n">vwc</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">dl_url</span><span class="p">,</span> <span class="n">input_path</span><span class="p">)</span>
+
+<span class="n">input_nc</span> <span class="o">=</span> <span class="n">netCDF4</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span><span class="n">input_path</span><span class="p">)</span>
+
+<span class="n">output_path</span> <span class="o">=</span> <span class="s">&#39;two-weeks-output.nc&#39;</span>
+<span class="c"># capture netcdf Dataset output for other processing</span>
+<span class="n">nc_out</span> <span class="o">=</span> <span class="n">isnobal</span><span class="p">(</span><span class="n">input_nc</span><span class="p">,</span> <span class="n">output_path</span><span class="p">)</span>  <span class="c"># saves output nc to output_path</span>
+<span class="n">nc_out</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>  <span class="c"># if no processing to be done, close the file</span>
+
+<span class="c"># now upload the output to the modelrun_uu from before</span>
+<span class="n">vwc</span><span class="o">.</span><span class="n">upload</span><span class="p">(</span><span class="n">modelrun_uu</span><span class="p">,</span> <span class="n">output_path</span><span class="p">)</span>
+
+<span class="c"># need to build the metadata again for the outputs</span>
+<span class="c"># use a lot of the same values from before</span>
+<span class="n">fgdc_md</span> <span class="o">=</span> <span class="n">make_fgdc_metadata</span><span class="p">(</span><span class="n">output_path</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">modelrun_uu</span><span class="p">,</span>
+    <span class="n">start_datetime</span><span class="p">,</span> <span class="n">end_datetime</span><span class="p">,</span> <span class="n">model_name</span><span class="o">=</span><span class="s">&#39;isnobal&#39;</span><span class="p">)</span>
+
+<span class="n">desc</span> <span class="o">=</span> <span class="s">&#39;outputs from two weeks of Dry Creek data isnobal run&#39;</span>
+<span class="n">watershed_md</span> <span class="o">=</span> \
+    <span class="n">metadata_from_file</span><span class="p">(</span><span class="n">output_path</span><span class="p">,</span> <span class="n">modelrun_uu</span><span class="p">,</span> <span class="n">modelrun_uu</span><span class="p">,</span> <span class="n">desc</span><span class="p">,</span>
+        <span class="n">watershed_name</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">start_datetime</span><span class="o">=</span><span class="n">start_datetime</span><span class="p">,</span>
+        <span class="n">end_datetime</span><span class="o">=</span><span class="n">end_datetime</span><span class="p">,</span> <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
+        <span class="n">fgdc_metadata</span><span class="o">=</span><span class="n">fgdc_metadata</span><span class="p">,</span> <span class="n">model_set</span><span class="o">=</span><span class="s">&#39;outputs&#39;</span><span class="p">,</span>
+        <span class="n">taxonomy</span><span class="o">=</span><span class="s">&#39;geoimage&#39;</span><span class="p">,</span> <span class="n">model_set_taxonomy</span><span class="o">=</span><span class="s">&#39;grid&#39;</span><span class="p">)</span>
+
+<span class="n">insert_res</span> <span class="o">=</span> <span class="n">vwc</span><span class="o">.</span><span class="n">insert_metadata</span><span class="p">(</span><span class="n">watershed_md</span><span class="p">)</span>
 </pre></div>
 </div>
+<p>And in that way we can run iSNOBAL using data from the Virtual Watershed and
+push our outputs back to the Virtual Watershed.</p>
 </div>
 
 
@@ -86,6 +156,9 @@ we gleaned from the IPW file&#8217;s header.</p>
             <p class="logo"><a href="index.html">
               <img class="logo" src="_static/wc_wave_triangles.png" alt="Logo"/>
             </a></p>
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="watershed.html"
+                        title="previous chapter">Virtual Watershed Adaptor</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">

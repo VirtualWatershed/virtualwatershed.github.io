@@ -80,7 +80,7 @@ tutorial guide.</p>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="watershed.html">Virtual Watershed Adaptor</a></li>
-<li class="toctree-l1"><a class="reference internal" href="isnobal.html">Python ISNOBAL Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="isnobal_netcdf.html">(iSNOBAL) modeling with NetCDF</a></li>
 </ul>
 </div>
 </div>
@@ -164,12 +164,13 @@ uploaded files belong to what model run UUID.</p>
 <h3>Create a new model run<a class="headerlink" href="#create-a-new-model-run" title="Permalink to this headline">¶</a></h3>
 <div class="highlight-python"><div class="highlight"><pre><span class="c"># create a new model run</span>
 <span class="n">new_mr_uuid</span> <span class="o">=</span> \
-    <span class="n">vw_client</span><span class="o">.</span><span class="n">initialize_model_run</span><span class="p">(</span>
+    <span class="n">vw_client</span><span class="o">.</span><span class="n">initialize_modelrun</span><span class="p">(</span>
         <span class="n">model_run_name</span><span class="o">=</span><span class="s">&#39;example model run for vw-doc&#39;</span><span class="p">,</span>
-        <span class="n">description</span><span class="o">=</span><span class="s">&#39;will be inserting only one file, in.0000, a multi-banded iSNOBAL input grid file&#39;</span><span class="p">,</span>
-        <span class="n">researcher_name</span><span class="o">=</span><span class="s">&#39;Matt Turner&#39;</span><span class="p">,</span> <span class="n">keywords</span><span class="o">=</span><span class="s">&#39;isnobal,example,idaho&#39;</span><span class="p">)</span>
+        <span class="n">description</span><span class="o">=</span><span class="s">&#39;a multi-banded iSNOBAL input grid file&#39;</span><span class="p">,</span>
+        <span class="n">researcher_name</span><span class="o">=</span><span class="s">&#39;Matt Turner&#39;</span><span class="p">,</span>
+        <span class="n">keywords</span><span class="o">=</span><span class="s">&#39;isnobal,example,idaho&#39;</span><span class="p">)</span>
 
-<span class="k">print</span> <span class="n">new_mr_uuid</span>  <span class="c"># something like u&#39;0a3e8c1f-c09a-46a3-8acb-6816ebd25e69&#39;</span>
+<span class="k">print</span> <span class="n">new_mr_uuid</span>  <span class="c">#  ex. u&#39;0a3e8c1f-c09a-46a3-8acb-6816ebd25e69&#39;</span>
 </pre></div>
 </div>
 <p>Now we could use another search, the model run search, to search for datasets

@@ -183,10 +183,10 @@ writeBinary.</p>
 
 <dl class="classmethod">
 <dt id="wcwave_adaptors.wcwave_adaptors.isnobal.IPW.from_nc">
-<em class="property">classmethod </em><code class="descname">from_nc</code><span class="sig-paren">(</span><em>nc_in</em>, <em>tstep=None</em>, <em>group=None</em>, <em>variable=None</em>, <em>distance_units='m'</em>, <em>coord_sys_ID='UTM'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#IPW.from_nc"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.from_nc" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">from_nc</code><span class="sig-paren">(</span><em>nc_in</em>, <em>tstep=None</em>, <em>file_type=None</em>, <em>variable=None</em>, <em>distance_units='m'</em>, <em>coord_sys_ID='UTM'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#IPW.from_nc"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.from_nc" title="Permalink to this definition">¶</a></dt>
 <dd><blockquote>
 <div><p>Generate an IPW object from a NetCDF file.</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="s">&#39;dataset.nc&#39;</span><span class="p">,</span> <span class="n">tstep</span><span class="o">=</span><span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="s">&#39;Inputs&#39;</span><span class="p">)</span>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="s">&#39;dataset.nc&#39;</span><span class="p">,</span> <span class="n">tstep</span><span class="o">=</span><span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="n">file_type</span><span class="o">=</span><span class="s">&#39;in&#39;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="n">nc_in</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -200,7 +200,7 @@ with kwarg <cite>distance_units</cite>. Simliar</p>
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
 <li><strong>(str or NetCDF4.Dataset) NetCDF to convert to IPW</strong> (<em>nc_in</em>) &#8211; </li>
 <li><strong>(int) The time step in whatever units are being used</strong> (<em>tstep</em>) &#8211; </li>
-<li><strong>(str) Group of NetCDF variable, e.g. 'Precipitation'</strong> (<em>group</em>) &#8211; </li>
+<li><strong>(str) file type of NetCDF variable, one of</strong> (<em>file_type</em>) &#8211; &#8216;in&#8217;, &#8216;precip&#8217;, &#8216;em&#8217;, &#8216;snow&#8217;, &#8216;mask&#8217;, &#8216;init&#8217;, &#8216;dem&#8217;</li>
 <li><strong>(str or list) One or many variable names to be</strong> (<em>variable</em>) &#8211; incorporated into IPW file</li>
 <li><strong>(str) If you use a measure of distance other</strong> (<em>distance_units</em>) &#8211; than meters, put the units here</li>
 <li><strong>(str) Coordinate system being used</strong> (<em>coord_sys_ID</em>) &#8211; <dl class="docutils">
