@@ -1,0 +1,225 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>WC-WAVE Adaptors Tutorial: Common Tasks &mdash; Virtual Watershed Documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="shortcut icon" href="_static/vwlogo_grey_favicon-32.png"/>
+    <link rel="top" title="Virtual Watershed Documentation" href="index.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="index.html">VW Info</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="wc-wave-adaptors-tutorial-common-tasks">
+<h1>WC-WAVE Adaptors Tutorial: Common Tasks<a class="headerlink" href="#wc-wave-adaptors-tutorial-common-tasks" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="pre-requisite">
+<span id="prereq"></span><h2>Pre-requisite<a class="headerlink" href="#pre-requisite" title="Permalink to this headline">¶</a></h2>
+<p>The only pre-requisite is that you have edited <code class="docutils literal"><span class="pre">default.conf.template</span></code> by
+adding your personally-unique data and a user name, password, and IP address
+which can be obtained by contacting <a class="reference external" href="mailto:maturner&#37;&#52;&#48;uidaho&#46;edu">Matthew Turner</a>
+via email.</p>
+<p>See <span class="xref std std-ref">the configuration note on the index page</span> for more
+details.</p>
+</div>
+<div class="section" id="upload-and-insert-data-and-metadata">
+<h2>Upload and insert data and metadata<a class="headerlink" href="#upload-and-insert-data-and-metadata" title="Permalink to this headline">¶</a></h2>
+<p>In this section we cover uploading data to the virtual watershed using the
+VW Python API.</p>
+<div class="section" id="upload-new-data-to-an-existing-model-run">
+<h3>Upload new data to an existing model run<a class="headerlink" href="#upload-new-data-to-an-existing-model-run" title="Permalink to this headline">¶</a></h3>
+<p>First, we&#8217;ll go over as briefly as possible the terms and concepts that we
+will use.</p>
+<p>The virtual watershed&#8217;s primary concern is with _models_. We do this because we
+want to track the relationship between model runs in a parent-child and sibling
+fashion. For example, we may collect some data and put it into a model_run. But
+then we might do some manipulations on that data, and the manipulated data
+becomes a child model run with its own unique identifier. However that new
+manipulated dataset has a <code class="docutils literal"><span class="pre">parent_model_run_uuid</span></code> equal to that of its parent&#8217;s
+<code class="docutils literal"><span class="pre">model_run_uuid</span></code>. See the example below for how this works in practice.</p>
+<p>If your data is not associated with a particular model, don&#8217;t be alarmed. Just
+use terms like <code class="docutils literal"><span class="pre">model_run_name</span></code> to mean <code class="docutils literal"><span class="pre">dataset_name</span></code>, for example.</p>
+<p>Before we go in to an example where there are multiple model runs, let&#8217;s look
+at initializing a brand new model run, uploading associated data for that
+model run, and automatically generating and inserting metadata for that model
+run.</p>
+</div>
+<div class="section" id="upload-data-automatically-create-and-insert-metadata">
+<span id="pyapi-upsert-new"></span><h3>Upload data, automatically create and insert metadata<a class="headerlink" href="#upload-data-automatically-create-and-insert-metadata" title="Permalink to this headline">¶</a></h3>
+<p>The Virtual Watershed adaptors provide functionality to upload either a directory
+or an individual file to the Virtual watershed and automatically generate and
+insert the metadata record(s) for the file(s) by using the <a class="reference internal" href="watershed.html#upsert-ref"><span>upsert function</span></a>.
+This is done through a series of helper functions, which are documented along
+with upsert in the <a class="reference internal" href="watershed.html#watershed-main"><span>watershed adaptor documentation</span></a>.</p>
+<p>Uploading either a file or directory is fairly simple, with some caveats.
+Assuming all the data for a model run is in one directory, you&#8217;d just run this:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">wcwave_adaptors.watershed</span> <span class="kn">import</span> <span class="n">upsert</span>
+
+<span class="n">dir_to_share</span> <span class="o">=</span> <span class="s">&#39;/Users/mturner/workspace/data_to_share&#39;</span>
+<span class="n">model_run_name</span> <span class="o">=</span> <span class="s">&#39;Unique description of resource&#39;</span>
+<span class="n">description</span> <span class="o">=</span> <span class="s">&#39;Potentially longer description beyond the name&#39;</span>
+<span class="c"># keywords should be a single string of comma-separated values</span>
+<span class="n">keywords</span> <span class="o">=</span> <span class="s">&#39;isnobal,snow,snow melt&#39;</span>
+
+<span class="n">new_model_run_uuid</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">upsert</span><span class="p">(</span><span class="n">dir_to_share</span><span class="p">,</span> <span class="n">model_run_name</span><span class="o">=</span><span class="n">model_run_name</span><span class="p">,</span>
+                               <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span> <span class="n">keywords</span><span class="o">=</span><span class="n">keywords</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A keyword argument that gets automatically filled in is the <code class="docutils literal"><span class="pre">config_file</span></code>
+kwarg. All will work well as long as you have edited <code class="docutils literal"><span class="pre">default.conf.template</span></code>
+by filling in information specific to you and saved it as <code class="docutils literal"><span class="pre">default.conf</span></code>.
+This, along with the files themselves, provides <code class="docutils literal"><span class="pre">upsert</span></code>, via our metadata
+builders, all the information it needs to automatically generate metadata
+for each file and for this model run so that another virtual watershed user can
+readily discover your shared data.</p>
+<p>We assign the results of the call to <code class="docutils literal"><span class="pre">upsert</span></code> to two variables, <code class="docutils literal"><span class="pre">new_model_run_uuid</span></code>
+and a dummy variable <code class="docutils literal"><span class="pre">_</span></code>. This is because <code class="docutils literal"><span class="pre">upsert</span></code> returns two strings, the
+<code class="docutils literal"><span class="pre">parent_model_run_uuid</span></code> and the <code class="docutils literal"><span class="pre">model_run_uuid</span></code>, which are the same in
+this case, so we only assign the parent.</p>
+</div>
+<div class="section" id="pyapi-upsert-append">
+<span id="id1"></span><h3>Upload new data to an existing model run<a class="headerlink" href="#pyapi-upsert-append" title="Permalink to this headline">¶</a></h3>
+<p>In the example above, we saved the new model run UUID to a variable. Let&#8217;s
+assume later on in our imaginary script, we need to put another file into
+the same container our other files went in. If we are looking at the view
+of our data in the virtual watershed web app, we want to add more files as
+entries in a data resource. In this case, we don&#8217;t need to provide a name,
+description, or any keywords, because we already did. We do have to provide the
+<code class="docutils literal"><span class="pre">model_run_uuid</span></code> that is associated with the resource we want to augment.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">upsert</span><span class="p">(</span><span class="s">&#39;/Users/mturner/workspace/more_root_data&#39;</span><span class="p">,</span>
+       <span class="n">parent_model_run_uuid</span><span class="o">=</span><span class="n">new_model_run_uuid</span><span class="p">,</span>
+       <span class="n">model_run_uuid</span><span class="o">=</span><span class="n">new_model_run_uuid</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Here we&#8217;ve actually inserted more data to the &#8220;root&#8221; model run. We communicate
+that by passing the same model run UUID as both the parent and the id. There is
+no hierarchy. In this next example, we create a new child model run of this root
+model run and insert some data there.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">newer_uuid</span> <span class="o">=</span> <span class="n">upsert</span><span class="p">(</span><span class="s">&#39;/Users/mturner/workspace/derived_data&#39;</span><span class="p">,</span>
+                    <span class="n">parent_model_run_uuid</span><span class="o">=</span><span class="n">new_model_run_uuid</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="search-for-data">
+<h2>Search for data<a class="headerlink" href="#search-for-data" title="Permalink to this headline">¶</a></h2>
+<p>Once you upload data, you&#8217;ll want to search for the data you just inserted.
+Here&#8217;s how to do that.</p>
+<p>For a little bit of background, here&#8217;s how you would check that your model
+run was actually inserted</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># default_vw_client uses our default.conf to connect to the watershed</span>
+<span class="kn">from</span> <span class="nn">wcwave_adaptors.watershed</span> <span class="kn">import</span> <span class="n">default_vw_client</span>
+<span class="c"># get a new VWClient connected as described in default.conf</span>
+<span class="n">vw_client</span> <span class="o">=</span> <span class="n">default_vw_client</span><span class="p">()</span>
+<span class="c"># on searching, we get a QueryResult object; we want the &#39;records&#39; attribute</span>
+<span class="n">results</span> <span class="o">=</span> <span class="n">vw_client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">model_run_uuid</span><span class="o">=</span><span class="n">newer_uuid</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Or go to your browser and enter this url:</p>
+<p><code class="docutils literal"><span class="pre">http://129.24.196.23/apps/my_app/search/datasets.json?version=3&amp;model_run_uuid=e6a4841a-691e-4764-9271-2f33e0ec39e8</span></code></p>
+<p>but put in the appropriate IP address as well as the model run UUID you got
+from your upsert calls.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/vwlogo_grey_800.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">WC-WAVE Adaptors Tutorial: Common Tasks</a><ul>
+<li><a class="reference internal" href="#pre-requisite">Pre-requisite</a></li>
+<li><a class="reference internal" href="#upload-and-insert-data-and-metadata">Upload and insert data and metadata</a><ul>
+<li><a class="reference internal" href="#upload-new-data-to-an-existing-model-run">Upload new data to an existing model run</a></li>
+<li><a class="reference internal" href="#upload-data-automatically-create-and-insert-metadata">Upload data, automatically create and insert metadata</a></li>
+<li><a class="reference internal" href="#pyapi-upsert-append">Upload new data to an existing model run</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#search-for-data">Search for data</a></li>
+</ul>
+</li>
+</ul>
+
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/tutorial.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Tri-State EPSCoR: WC-WAVE.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.4</a>
+      
+      |
+      <a href="_sources/tutorial.txt"
+          rel="nofollow">Page source</a></li>
+    </div>
+
+    
+
+    
+  </body>
+</html>

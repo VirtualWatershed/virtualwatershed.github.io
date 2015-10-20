@@ -1,0 +1,353 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Python ISNOBAL Interface &mdash; Virtual Watershed Documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="shortcut icon" href="_static/vwlogo_grey_favicon-32.png"/>
+    <link rel="top" title="Virtual Watershed Documentation" href="index.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="index.html">VW Info</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="python-isnobal-interface">
+<h1>Python ISNOBAL Interface<a class="headerlink" href="#python-isnobal-interface" title="Permalink to this headline">¶</a></h1>
+<p>The <a class="reference external" href="http://cgiss.boisestate.edu/~hpm/software/IPW/index.html">Image Processing Workbench (IPW) software package</a> is the standard on
+which we base our work here. We need to extend this functionality a bit, if for
+no other reason to improve the usability and documentation, which seem pretty
+lacking.</p>
+<p>IPW is a pretty large project of which the ISNOBAL model is one part. The
+groundbreaking paper that established ISNOBAL as one of the premier snowmelt
+water input models is
+<a class="reference download internal" href="_downloads/marks1999A.pdf"><code class="xref download docutils literal"><span class="pre">Marks,</span> <span class="pre">et</span> <span class="pre">al.,</span> <span class="pre">1999</span></code></a>. The ISNOBAL
+documentation, including what each band is in each type of file, can be found
+<a class="reference external" href="http://cgiss.boisestate.edu/~hpm/software/IPW/man1/isnobal.html">here</a>.</p>
+<p>The best way to find a file is by first searching through this <a class="reference external" href="http://cgiss.boisestate.edu/~hpm/software/IPW/userGuide/categories/All.html">grouped list
+of Standard IPW User Commands</a>.</p>
+<p>Every IPW file has some lines dedicated to its header, which describes the
+image, and a single binary line that must be parsed according to the information
+in the header. The line of binary data represents a <a class="reference external" href="http://cgiss.boisestate.edu/~hpm/software/IPW/userGuide/pixelsAndBands.html">data cube, visualized
+here</a>.
+There are <span class="math">\(N_l\)</span> lines of data, <span class="math">\(N_s\)</span> geographic samples,
+and <span class="math">\(N_b\)</span> bands. Transformed to human-readable data, the binary data
+looks something like this made up example:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="22%" />
+<col width="39%" />
+<col width="39%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Temp</th>
+<th class="head">Pressure</th>
+<th class="head">Dew Point</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>23.4</td>
+<td>101.0</td>
+<td>21.0</td>
+</tr>
+<tr class="row-odd"><td>24.5</td>
+<td>100.0</td>
+<td>20.0</td>
+</tr>
+<tr class="row-even"><td>24.1</td>
+<td>102.3</td>
+<td>22.0</td>
+</tr>
+<tr class="row-odd"><td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+</tbody>
+</table>
+<p>You can see what the binary data actually looks like in Python by doing the
+following:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">filePath</span> <span class="o">=</span> <span class="s">&quot;path/to/in.0000&quot;</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filePath</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
+
+<span class="n">header</span> <span class="o">=</span> <span class="n">lines</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+<span class="n">binaryPart</span> <span class="o">=</span> <span class="n">lines</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="n">binaryPart</span><span class="p">[:</span><span class="mi">100</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Only looking at the first 100 characters will keep your screen from getting
+filled with hexadecimal digits.</p>
+<p>Before we read any of that data to be integers, which we can then convert to
+floating point like in the table above, we need to know the scheme for doing so.
+That is given to us in the rest of the basic image header, which tells us</p>
+<ol class="arabic simple">
+<li>The number of bits used to store a sample in the band</li>
+<li>The number of bytes used to store these bits</li>
+<li>The floating-point range of each band</li>
+<li>(Optional) Annotative text describing the band</li>
+</ol>
+<div class="section" id="basic-ipw-operations">
+<h2>Basic IPW Operations<a class="headerlink" href="#basic-ipw-operations" title="Permalink to this headline">¶</a></h2>
+<p>We can get a summary of this information using the IPW command <a class="reference external" href="http://cgiss.boisestate.edu/~hpm/software/IPW/man1/ipwfile.html">ipwfile</a>:</p>
+<div class="highlight-bash"><div class="highlight"><pre><span class="nv">$ </span>ipwfile in.0000
+File: <span class="s2">&quot;in.00&quot;</span>  Bands: <span class="m">5</span>  Lines: <span class="m">148</span>  Samples: <span class="m">170</span>  Bytes/Pixel: <span class="m">1</span> <span class="m">1</span> <span class="m">2</span> <span class="m">2</span> 1
+</pre></div>
+</div>
+<p>Note: some input files have five bands and some have six. The last one may
+be omitted if the sun is down.</p>
+<p>We can get a view of the floating point values stored in an image file using the
+<a class="reference external" href="http://cgiss.boisestate.edu/~hpm/software/IPW/man1/primg.html">primg command</a>:</p>
+<div class="highlight-bash"><div class="highlight"><pre><span class="nv">$ </span>primg -a -i in.0000
+292.157 22.4 468.743 0.84229 0
+296.078 22.4 468.743 0.84229 0
+296.078 22.4 468.743 0.84229 0
+294.118 22.4 468.743 0.84229 0
+296.078 22.4 468.743 0.84229 0
+296.078 22.4 468.743 0.84229 0
+<span class="m">300</span> 22.4 468.743 0.84229 0
+<span class="m">300</span> 22.4 468.743 0.84229 0
+294.118 22.4 468.743 0.84229 0
+296.078 22.4 468.743 0.84229 0
+</pre></div>
+</div>
+<p>Note that</p>
+<div class="highlight-bash"><div class="highlight"><pre><span class="nv">$ </span>primg -a -iin.0000 <span class="p">|</span> wc -l
+25160
+</pre></div>
+</div>
+<p>is equal to the number of lines times the number of samples, which makes
+&#8220;lines&#8221; seem a bit of a misnomer.</p>
+</div>
+<div class="section" id="reading-ipw-with-python">
+<h2>Reading IPW with Python<a class="headerlink" href="#reading-ipw-with-python" title="Permalink to this headline">¶</a></h2>
+<p>The <code class="docutils literal"><span class="pre">IPW</span></code> class takes care of reading, modifying, and writing modified IPW
+files. To use it, simply provide the file name you wish to load into Python.</p>
+<dl class="class">
+<dt id="wcwave_adaptors.wcwave_adaptors.isnobal.IPW">
+<em class="property">class </em><code class="descclassname">wcwave_adaptors.wcwave_adaptors.isnobal.</code><code class="descname">IPW</code><span class="sig-paren">(</span><em>input_file=None</em>, <em>config_file=None</em>, <em>water_year=None</em>, <em>dt=None</em>, <em>file_type=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#IPW"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.IPW" title="Permalink to this definition">¶</a></dt>
+<dd><p>Represents an IPW file. Provides a data_frame attribute to access the
+variables and their floating point representation as a dataframe. The
+dataframe can be modified, the headers recalculated with
+recalculateHeaders, and then written back to IPW binary with
+writeBinary.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="p">(</span><span class="s">&quot;in.0000&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ipw</span><span class="o">.</span><span class="n">data_frame</span><span class="o">.</span><span class="n">T_a</span> <span class="o">=</span> <span class="n">ipw</span><span class="o">.</span><span class="n">data_frame</span><span class="o">.</span><span class="n">T_a</span> <span class="o">+</span> <span class="mf">1.0</span> <span class="c"># add 1 dg C to each temp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ipw</span><span class="o">.</span><span class="n">writeBinary</span><span class="p">(</span><span class="s">&quot;in.plusOne.000&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="method">
+<dt id="wcwave_adaptors.wcwave_adaptors.isnobal.IPW.data_frame">
+<code class="descname">data_frame</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#IPW.data_frame"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.data_frame" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the Pandas DataFrame representation of the IPW file</p>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="wcwave_adaptors.wcwave_adaptors.isnobal.IPW.from_nc">
+<em class="property">classmethod </em><code class="descname">from_nc</code><span class="sig-paren">(</span><em>nc_in</em>, <em>tstep=None</em>, <em>file_type=None</em>, <em>variable=None</em>, <em>distance_units='m'</em>, <em>coord_sys_ID='UTM'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#IPW.from_nc"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.from_nc" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Generate an IPW object from a NetCDF file.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="s">&#39;dataset.nc&#39;</span><span class="p">,</span> <span class="n">tstep</span><span class="o">=</span><span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="n">file_type</span><span class="o">=</span><span class="s">&#39;in&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ipw</span> <span class="o">=</span> <span class="n">IPW</span><span class="o">.</span><span class="n">from_nc</span><span class="p">(</span><span class="n">nc_in</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>If your data uses units of distance other than meters, set that
+with kwarg <cite>distance_units</cite>. Simliar</p>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>(str or NetCDF4.Dataset) NetCDF to convert to IPW</strong> (<em>nc_in</em>) &#8211; </li>
+<li><strong>(int) The time step in whatever units are being used</strong> (<em>tstep</em>) &#8211; </li>
+<li><strong>(str) file type of NetCDF variable, one of</strong> (<em>file_type</em>) &#8211; &#8216;in&#8217;, &#8216;precip&#8217;, &#8216;em&#8217;, &#8216;snow&#8217;, &#8216;mask&#8217;, &#8216;init&#8217;, &#8216;dem&#8217;</li>
+<li><strong>(str or list) One or many variable names to be</strong> (<em>variable</em>) &#8211; incorporated into IPW file</li>
+<li><strong>(str) If you use a measure of distance other</strong> (<em>distance_units</em>) &#8211; than meters, put the units here</li>
+<li><strong>(str) Coordinate system being used</strong> (<em>coord_sys_ID</em>) &#8211; <dl class="docutils">
+<dt>Returns:</dt>
+<dd>(IPW) IPW instance built from NetCDF inputs</dd>
+</dl>
+</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="wcwave_adaptors.wcwave_adaptors.isnobal.IPW.precip_tuple">
+<em class="property">classmethod </em><code class="descname">precip_tuple</code><span class="sig-paren">(</span><em>precip_file</em>, <em>sepchar='\t'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#IPW.precip_tuple"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.precip_tuple" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create list of two-lists where each element&#8217;s elements are the time
+index of the time step when the precipitation happened and an IPW
+of the precipitation data.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="wcwave_adaptors.wcwave_adaptors.isnobal.IPW.recalculate_header">
+<code class="descname">recalculate_header</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#IPW.recalculate_header"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.recalculate_header" title="Permalink to this definition">¶</a></dt>
+<dd><p>Recalculate header values</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="wcwave_adaptors.wcwave_adaptors.isnobal.IPW.write">
+<code class="descname">write</code><span class="sig-paren">(</span><em>fileName</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#IPW.write"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.IPW.write" title="Permalink to this definition">¶</a></dt>
+<dd><p>Write the IPW data to file</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="run-isnobal-from-python">
+<h2>Run ISNOBAL from Python<a class="headerlink" href="#run-isnobal-from-python" title="Permalink to this headline">¶</a></h2>
+<p>The ISNOBAL interface is a simple, straight-forward wrapper for ISNOBAL.</p>
+<dl class="function">
+<dt id="wcwave_adaptors.wcwave_adaptors.isnobal.isnobal">
+<code class="descclassname">wcwave_adaptors.wcwave_adaptors.isnobal.</code><code class="descname">isnobal</code><span class="sig-paren">(</span><em>nc_in=None</em>, <em>nc_out_fname=None</em>, <em>data_tstep=60</em>, <em>nsteps=8758</em>, <em>init_img='data/init.ipw'</em>, <em>precip_file='data/ppt_desc'</em>, <em>mask_file='data/tl2p5mask.ipw'</em>, <em>input_prefix='data/inputs/in'</em>, <em>output_frequency=1</em>, <em>em_prefix='data/outputs/em'</em>, <em>snow_prefix='data/outputs/snow'</em>, <em>dt='hours'</em>, <em>year=2010</em>, <em>month=10</em>, <em>day='01'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#isnobal"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.isnobal" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper for running the ISNOBAL
+(<a class="reference external" href="http://cgiss.boisestate.edu/~hpm/software/IPW/man1/isnobal.html">http://cgiss.boisestate.edu/~hpm/software/IPW/man1/isnobal.html</a>)
+model.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>(netCDF4.Dataset) Input NetCDF4 dataset. See</strong> (<em>nc_in</em>) &#8211; AssertISNOBALInput for requirements.</li>
+<li><strong>(str) Name of NetCDF file to write to, if desired</strong> (<em>nc_out_fname</em>) &#8211; </li>
+<li><strong>explanations the rest, see the link above.</strong> (<em>For</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">(netCDF4.Dataset) NetCDF Dataset object of the outputs</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<div class="section" id="aggregate-a-list-or-series-of-ipw-instances-to-decrease-timestep">
+<h2>Aggregate a list or series of IPW instances to decrease timestep<a class="headerlink" href="#aggregate-a-list-or-series-of-ipw-instances-to-decrease-timestep" title="Permalink to this headline">¶</a></h2>
+<p>Use this function when you want to, for example, transform a list of IPW instances
+that represent one hour&#8217;s worth of data to represent some larger amount of time&#8217;s
+data. For a specific example, we might want to sum three days&#8217; worth of hourly
+data to create a single IPW instance:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># assume we have 21 day&#39;s worth of data, meaning 504 IPW binary files</span>
+<span class="n">ipws</span> <span class="o">=</span> <span class="p">[</span><span class="n">IPW</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span><span class="p">]</span>
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">ipws</span><span class="p">)</span> <span class="o">==</span> <span class="mi">504</span>
+
+<span class="c"># sum every 72 hours worth of data (&#39;3D&#39; = 3 days)</span>
+<span class="n">three_day_ipws</span> <span class="o">=</span> <span class="n">reaggregate_ipws</span><span class="p">(</span><span class="n">ipws</span><span class="p">,</span> <span class="n">rule</span><span class="o">=</span><span class="s">&#39;3D&#39;</span><span class="p">)</span>
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">ipws</span><span class="p">)</span> <span class="o">==</span> <span class="mi">7</span>
+</pre></div>
+</div>
+<dl class="function">
+<dt id="wcwave_adaptors.wcwave_adaptors.isnobal.reaggregate_ipws">
+<code class="descclassname">wcwave_adaptors.wcwave_adaptors.isnobal.</code><code class="descname">reaggregate_ipws</code><span class="sig-paren">(</span><em>ipws</em>, <em>fun=&lt;function sum&gt;</em>, <em>freq='H'</em>, <em>rule='D'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wcwave_adaptors/wcwave_adaptors/isnobal.html#reaggregate_ipws"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wcwave_adaptors.wcwave_adaptors.isnobal.reaggregate_ipws" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resample IPWs using the function fun, but only sum is supported.
+<cite>freq</cite> corresponds to the actual frequency of the ipws; rule corresponds to
+one of the resampling &#8216;rules&#8217; given here:
+<a class="reference external" href="http://pandas.pydata.org/pandas-docs/dev/timeseries.html#time-date-components">http://pandas.pydata.org/pandas-docs/dev/timeseries.html#time-date-components</a></p>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/vwlogo_grey_800.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Python ISNOBAL Interface</a><ul>
+<li><a class="reference internal" href="#basic-ipw-operations">Basic IPW Operations</a></li>
+<li><a class="reference internal" href="#reading-ipw-with-python">Reading IPW with Python</a></li>
+<li><a class="reference internal" href="#run-isnobal-from-python">Run ISNOBAL from Python</a></li>
+<li><a class="reference internal" href="#aggregate-a-list-or-series-of-ipw-instances-to-decrease-timestep">Aggregate a list or series of IPW instances to decrease timestep</a></li>
+</ul>
+</li>
+</ul>
+
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/isnobal.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Tri-State EPSCoR: WC-WAVE.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.4</a>
+      
+      |
+      <a href="_sources/isnobal.txt"
+          rel="nofollow">Page source</a></li>
+    </div>
+
+    
+
+    
+  </body>
+</html>
