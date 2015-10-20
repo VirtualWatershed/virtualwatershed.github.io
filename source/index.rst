@@ -1,9 +1,3 @@
-.. Virtual Watershed Documentation documentation master file, created by
-   sphinx-quickstart on Mon Mar 16 16:02:33 2015.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-
 Cyberinfrastructure Solutions for Watershed Hydrology
 =====================================================
 
