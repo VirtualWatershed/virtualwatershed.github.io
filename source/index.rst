@@ -19,8 +19,8 @@ navigate down to `Cyberinfrastructure Solutions
 <#cyberinfrastructure-solutions>`_.
 
 
-Use Case 1: ISNOBAL modeling in Reynolds Creek, Idaho
------------------------------------------------------
+User Story 1: ISNOBAL modeling in Reynolds Creek, Idaho
+-------------------------------------------------------
 
 This use case was the first use case we considered and became the prototype
 for the entire system. Like other models a hydrologist may use,
@@ -61,8 +61,26 @@ to which historical or forecast scenario, this would allow her and others
 to focus on science instad of cyberinfrastructure.  
 
 
-Use Case 2: Coupling floodplain succession models to flooding models
---------------------------------------------------------------------
+User Story 2: Precipitation Runoff Modeling in the Lehman Creek Watershed
+-------------------------------------------------------------------------
+
+With a heating climate and dwindling snowpack in many mountainous regions and
+ever-increasing demand from southern Nevada, the Lehman Creek watershed in Great
+Basin National Park is under increasing pressure. Thus it's more critical than
+ever to understand the sensitivity of the watershed under various 
+climate change scenarios. Chao Chen and her PhD advisor Sajjad Ahmad are
+pursuing this important work.
+
+Like many hydrological models, there are many parameters that must be
+specified in order to run PRMS, the model being used to study Lehman Creek
+hydrology. In addition to being able to run PRMS through a web interface and to
+simplify data management for running multiple scenarios, the Lehman Creek team
+would also like to be able to interactively manipulate parameters.
+Parameterization is very important.  Without proper parameterization, the model
+is not scientifically valid.
+
+User Story 3: Coupling floodplain succession models to flooding models
+----------------------------------------------------------------------
 
 The fundamental problem in this use case is similar to the first use case:
 because many of these models were created in isolation before standards were
@@ -84,15 +102,15 @@ mesh in netCDF. CASiMiR requires specifically-formatted
 `ESRI Ascii files <http://resources.esri.com/help/9.3/arcgisdesktop/com/gp_toolref/spatial_analyst_tools/esri_ascii_raster_format.htm>`_.
 
 In addition to this mismatch of platforms and data formats, we have the
-opportunity as in Use Case 1 to simplify the entire data management process. 
+opportunity as in User Story 1 to simplify the entire data management process. 
 One of the major goals of the Virtual Watershed is to enable watershed
 scientists to investigate the impacts of climate change scenarios on the
 watersheds they study. The flood dynamics and landscape succession of the Jemez
 River and surrounding area is dependent on the 
 
 
-Use Case 3: Modeling the Hydrodynamics of the Valles Caldera in New Mexico
---------------------------------------------------------------------------
+User Story 4: Modeling the Hydrodynamics of the Valles Caldera in New Mexico
+----------------------------------------------------------------------------
 
 Understanding the hydrodynamics of the Valles Caldera will be important 
 in its own right and for understanding flood dynamics and vegetation succession
@@ -108,12 +126,15 @@ there is no obvious way to download model-ready data at a fine enough
 resolution to be useful in the Valles Caldera.  We only have access to some
 `weather station data made available by the Desert Research Institute
 <http://www.wrcc.dri.edu/vallescaldera/>`_.  So this shares a requirement from
-Use Case 1, that the watershed scientists need gridded data, not weather 
+User Story 1, that the watershed scientists need gridded data, not weather 
 station data, at a useful resolution. Since the outputs of this modeling will be
-useful for Sarah and Angela working on Use Case 2, Michael will need to be able
+useful for Sarah and Angela working on User Story 2, Michael will need to be able
 to share his data outputs in a meaningful way so they may be easily found and
 understood by his collaborators. We'll also want to understand multiple
-scenarios, so the model run tracking capabilities of the 
+scenarios, so the model run tracking capabilities of the Virtual Watershed
+should be valuable here as well.
+
+
 
 
 The Virtual Watershed System
