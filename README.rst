@@ -13,7 +13,7 @@ Contributing
 
 It's easy to contribute to this documentation. To edit the user stories
 you see on `http://virtualwatershed.github.io`,
-click here to `edit source/index.rst`.  Find your user story and make whatever
+click `here to edit source/index.rst <https://github.com/VirtualWatershed/virtualwatershed.github.io/edit/master/README.rst>`_.  Find your user story and make whatever
 changes you like.  
 
 More information on the ``.rst`` file type is below. 
