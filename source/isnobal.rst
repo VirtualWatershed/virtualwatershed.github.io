@@ -118,7 +118,7 @@ Reading IPW with Python
 The ``IPW`` class takes care of reading, modifying, and writing modified IPW 
 files. To use it, simply provide the file name you wish to load into Python.
 
-.. autoclass:: wcwave_adaptors.wcwave_adaptors.isnobal.IPW
+.. autoclass:: vwpy.isnobal.IPW
     :members:
 
 
@@ -127,7 +127,7 @@ Run ISNOBAL from Python
 
 The ISNOBAL interface is a simple, straight-forward wrapper for ISNOBAL. 
 
-.. autofunction:: wcwave_adaptors.wcwave_adaptors.isnobal.isnobal
+.. autofunction:: vwpy.isnobal.isnobal
 
 Aggregate a list or series of IPW instances to decrease timestep
 ````````````````````````````````````````````````````````````````
@@ -147,5 +147,5 @@ data to create a single IPW instance:
     three_day_ipws = reaggregate_ipws(ipws, rule='3D')
     assert len(ipws) == 7
 
-.. autofunction:: wcwave_adaptors.wcwave_adaptors.isnobal.reaggregate_ipws
+.. autofunction:: vwpy.isnobal.reaggregate_ipws
 

@@ -1,19 +1,10 @@
-**API Documentation Table of Contents**
-
-.. toctree:: 
-    :maxdepth: 1
-
-    watershed
-    isnobal_netcdf
-
-
 Connect to and query the VWDE
 -----------------------------
 
 First, the pre-requisites are:
 
-1. You've followed the installation instructions at the `wcwave_adaptors GitHub page <https://github.com/tri-state-epscor/wcwave_adaptors>`_.
-2. You've added the  ``wcwave_adaptors`` to your path, either through ``sys.path.append('~/path/to/adaptors')`` or through the ``$PYTHONPATH`` environment variable.
+1. You've followed the installation instructions at the `vw-py GitHub page <https://github.com/VirtualWatershed/vw-py>`_.
+2. You've added the  ``vw-py`` directory to your path, either through ``sys.path.append('~/path/to/adaptors')`` or through the ``$PYTHONPATH`` environment variable.
 3. You have an account with the Virtual Watershed data engine, which you must ask for. Please email `Matt Turner <maturner@uidaho.edu>`_ for an account.
 
 Now in an IPython (or other) shell, follow along with these examples.
@@ -22,7 +13,7 @@ To connect to the virtual watershed
 
 .. code-block:: python
     
-    from wcwave_adaptors import VWClient
+    from vwpy import VWClient
     vw_client = VWClient('https://vwp-dev.unm.edu', 'your-username', 'your-password')
 
 If you have been authenticated correctly, this will finish silently. 
@@ -31,10 +22,11 @@ You may also use this
 
 .. code-block:: python
 
+    from vwpy import default_vw_client
     vw_client = default_vw_client()
 
 But in order for this to work, you must have personalized your ``default.conf`` 
-as described in the `wcwave_adaptors README <https://github.com/tri-state-epscor/wcwave_adaptors#configuration-files>`_.
+as described in the `vw-py README <https://github.com/VirtualWatershed/vw-py>`_.
 
 .. warning::
 
@@ -49,7 +41,7 @@ In order to query all datasets and how many are in the virtual watershed,
 
     search_result = vw_client.dataset_search()
     
-    from wcwave_adaptors import QueryResult
+    from vwpy import QueryResult
     assert isinstance(search_result, QueryResult)
     
     # search
@@ -85,7 +77,7 @@ input file ``in.0000``
 (http://vwp-dev.unm.edu/apps/vwp/datasets/a33893dd-d919-472a-8583-b35d9cda967a/in.0000.original.bin).  
 All this metadata is for this one file.
 
-This may seem overwhelming, but the ``wcwave_adaptors`` provide help to create
+This may seem overwhelming, but the ``vwpy`` provide help to create
 this metadata, which is the topic of the next section.
 
 

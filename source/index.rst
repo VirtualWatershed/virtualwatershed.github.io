@@ -8,9 +8,12 @@ public transportation. The use cases below illustrate
 how these cyberinfrastructure services can make watershed science more
 efficient and enable scientists to ask new modeling questions.
 
-If you are impatient to get to the tech or already familiar with the use cases,
-navigate down to `Cyberinfrastructure Solutions
-<#cyberinfrastructure-solutions>`_.
+.. toctree::
+    :maxdepth: 2
+    
+    vw-py-vwclient
+    isnobal
+
 
 
 User Story 1: ISNOBAL modeling in Reynolds Creek, Idaho
